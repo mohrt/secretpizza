@@ -1,0 +1,92 @@
+.why-slice {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.why-slice-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.concept-section {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+.concept-image {
+  flex-shrink: 0;
+}
+
+.pizza-key-image {
+  width: 120px;
+  height: auto;
+  object-fit: contain;
+}
+
+.concept-text {
+  flex: 1;
+}
+
+.concept-text h3,
+.info-section h3 {
+  font-size: 1.25rem;
+  margin-bottom: 0.75rem;
+  color: #111827;
+}
+
+.concept-text p,
+.info-section p {
+  color: #4b5563;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+.concept-text a,
+.info-section a {
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.concept-text a:hover,
+.info-section a:hover {
+  text-decoration: underline;
+}
+
+.info-section {
+  padding: 1.5rem;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.info-section ul {
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+  color: #4b5563;
+  line-height: 1.8;
+}
+
+.info-section li {
+  margin-bottom: 0.5rem;
+}
+
+.footer-note {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid #e5e7eb;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.footer-note a {
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+.footer-note a:hover {
+  text-decoration: underline;
+}
+

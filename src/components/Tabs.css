@@ -1,0 +1,62 @@
+.tabs-container {
+  width: 100%;
+}
+
+.tabs-list {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 2rem;
+  justify-content: center;
+  align-items: center;
+}
+
+.tab-button {
+  padding: 4px 8px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  transition: all 0.2s;
+  position: relative;
+  bottom: -1px;
+  border-radius: 10px;
+}
+
+.tab-button:hover {
+  color: #374151;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.tab-button.active {
+  background: lab(56.7% 50.6 47.2);
+  color: white;
+  border-bottom: 2px solid #111827;
+  font-weight: 500;
+}
+
+/* Fallback for browsers that don't support LAB color */
+@supports not (background: lab(0% 0 0)) {
+  .tab-button.active {
+    background: rgb(15, 46, 87);
+  }
+}
+
+.tab-panel {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+

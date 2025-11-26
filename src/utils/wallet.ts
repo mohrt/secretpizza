@@ -3,7 +3,7 @@
  * All operations are client-side only for security
  */
 
-import { PrivateKey, PublicKey } from '@bsv/sdk'
+import { PrivateKey } from '@bsv/sdk'
 
 export interface Wallet {
   privateKey: string
@@ -44,5 +44,21 @@ export function validatePrivateKey(privateKeyString: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * Generate multiple addresses from a wallet
+ * For now, returns the wallet's primary address multiple times
+ * In production, this should use proper HD wallet derivation (BIP32/BIP44) to generate
+ * multiple addresses from a single seed/mnemonic
+ * @param wallet - Wallet object
+ * @param count - Number of addresses to generate (default: 5)
+ * @returns Array of addresses
+ */
+export function generateAddresses(wallet: Wallet, count: number = 5): string[] {
+  // For now, return the wallet's primary address
+  // TODO: Implement proper HD wallet derivation (BIP32/BIP44) to generate multiple addresses
+  // from a single seed/mnemonic phrase
+  return Array(count).fill(wallet.address)
 }
 
