@@ -8,12 +8,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Progress } from "@/components/ui/progress"
 import { Info, Pizza, Dice3, Download, Key } from "lucide-react"
-import { generateMnemonic } from "bip39"
+import { entropyToMnemonic } from "@scure/bip39"
+import { wordlist } from "@scure/bip39/wordlists/english.js"
+import { PrivateKey } from "@bsv/sdk"
+import { diceRollsToMnemonic, diceRollsToPrivateKey } from "@/utils/dice2mnemonic"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useIsMobile } from "@/hooks/use-mobile"
 
-import { DiceRollSection, type DieType, type DiceState } from "@/components/dice-roll-section"
+import { DiceRollSection, type DieType } from "@/components/dice-roll-section"
 import { PizzaChart } from "@/components/pizza-chart"
 import { PresetButtons } from "@/components/preset-buttons"
 import { SliceConfigSliders } from "@/components/slice-config-sliders"
@@ -24,6 +27,7 @@ import { KeySliceDialog } from "@/components/key-slice-dialog"
 import { AboutTab } from "@/components/about-tab"
 import { RestoreTab } from "@/components/restore-tab"
 import DisplayCards from "@/components/ui/display-cards"
+import { EntropyCollector } from "@/components/entropy-collector"
 
 export interface MainInterfaceHandle {
   setActiveTab: (tab: string) => void
@@ -58,14 +62,9 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
     const [selectedKeySlice, setSelectedKeySlice] = useState<number | null>(null)
     const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
 
-    const [diceState, setDiceState] = useState<Record<DieType, DiceState>>({
-      coin: { enabled: false, value: "" },
-      d4: { enabled: false, value: "" },
-      d6: { enabled: false, value: "" },
-      d8: { enabled: false, value: "" },
-      d10: { enabled: false, value: "" },
-      d16: { enabled: false, value: "" },
-    })
+    const [selectedDie, setSelectedDie] = useState<DieType | null>(null)
+    const [showEntropyCollector, setShowEntropyCollector] = useState(false)
+    const [pendingWordCount, setPendingWordCount] = useState<12 | 24 | null>(null)
 
     const ENTROPY_TARGET_LENGTH = 50
 
@@ -74,13 +73,9 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
       setActiveTab: (tab) => onTabChange?.(tab),
       setShowRollArea: (show) => setShowRollArea(show),
       enableDice: (diceToEnable) => {
-        setDiceState((prev) => {
-          const newState = { ...prev }
-          diceToEnable.forEach((die) => {
-            newState[die] = { ...newState[die], enabled: true, value: "1" }
-          })
-          return newState
-        })
+        if (diceToEnable.length > 0) {
+          setSelectedDie(diceToEnable[0])
+        }
       },
       setPreset: (total, required) => {
         setTotalSlices(total)
@@ -89,28 +84,68 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
       setShowAdvancedOptions: (show) => setShowAdvancedOptions(show),
     }))
 
-    // Event handlers
-    const toggleDie = (die: DieType) => {
-      setDiceState((prev) => ({
-        ...prev,
-        [die]: {
-          enabled: !prev[die].enabled,
-          value: !prev[die].enabled ? "1" : prev[die].value,
-        },
-      }))
-    }
-
-    const updateDieValue = (die: DieType, value: string) => {
-      setDiceState((prev) => ({
-        ...prev,
-        [die]: { ...prev[die], value },
-      }))
+    // Convert dice rolls to mnemonic or private key
+    // IMPORTANT: This is PURELY DETERMINISTIC - NO PRNG is used
+    // Uses the exact algorithm from https://github.com/mohrt/dice2mnemonic
+    const convertDiceRollsToSecret = (rolls: string, dieType: DieType, outputType: "mnemonic" | "privateKey", seedLength: 12 | 24 = 12) => {
+      try {
+        if (outputType === "mnemonic") {
+          // Use dice2mnemonic algorithm (matches Python script exactly)
+          const mnemonic = diceRollsToMnemonic(rolls, dieType, seedLength)
+          setSecret(mnemonic)
+          toast.success(`Generated ${seedLength}-word mnemonic phrase from dice rolls`)
+        } else {
+          // Convert to private key (deterministic)
+          // d16: uses exact hex string (base16)
+          // Other dice: converts base-N to base16 (hex)
+          const privateKeyHex = diceRollsToPrivateKey(rolls, dieType)
+          
+          if (dieType === "d16") {
+            // For d16, use the hex string directly (already base16)
+            setSecret(privateKeyHex)
+          } else {
+            // For other dice types, convert hex to PrivateKey format
+            try {
+              const privateKey = PrivateKey.fromString(privateKeyHex)
+              setSecret(privateKey.toString())
+            } catch (e) {
+              // If conversion fails, use hex string directly
+              setSecret(privateKeyHex)
+            }
+          }
+          toast.success("Generated private key from dice rolls")
+        }
+      } catch (error) {
+        console.error("Error converting dice rolls:", error)
+        const errorMessage = error instanceof Error ? error.message : "Failed to convert dice rolls"
+        toast.error(errorMessage)
+      }
     }
 
     const generatePhrase = (words: 12 | 24) => {
-      const strength = words === 12 ? 128 : 256
-      const mnemonic = generateMnemonic(strength)
-      setSecret(mnemonic)
+      // Open entropy collector dialog
+      setPendingWordCount(words)
+      setShowEntropyCollector(true)
+    }
+
+    const handleEntropyCollected = (entropy: Uint8Array) => {
+      if (!pendingWordCount) return
+      
+      try {
+        // Use the collected entropy to generate mnemonic
+        // entropyToMnemonic requires exactly 16 bytes (128 bits) for 12 words or 32 bytes (256 bits) for 24 words
+        const requiredBytes = pendingWordCount === 12 ? 16 : 32
+        const finalEntropy = entropy.slice(0, requiredBytes)
+        
+        const mnemonic = entropyToMnemonic(finalEntropy, wordlist)
+        setSecret(mnemonic)
+        setShowEntropyCollector(false)
+        setPendingWordCount(null)
+        toast.success(`Generated ${pendingWordCount}-word mnemonic phrase`)
+      } catch (error) {
+        console.error("Error generating mnemonic from entropy:", error)
+        toast.error("Failed to generate mnemonic. Please try again.")
+      }
     }
 
     const handleTotalSlicesChange = (value: number[]) => {
@@ -322,8 +357,8 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
                       value={secret}
                       onChange={(e) => setSecret(e.target.value)}
                       placeholder={
-                        Object.values(diceState).some((d) => d.enabled)
-                          ? "Type your die / coin roll results here: e.g. 123912923993021312332133023012301231233213302301"
+                        selectedDie
+                          ? `Enter your ${selectedDie} roll results here`
                           : "Enter a mnemonic phrase, private key, or any text you want kept secret."
                       }
                       className="min-h-[120px] font-mono text-sm resize-y"
@@ -345,11 +380,9 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
 
                   {showRollArea && (
                     <DiceRollSection
-                      diceState={diceState}
-                      onToggleDie={toggleDie}
-                      onUpdateDieValue={updateDieValue}
-                      onConvertToSeed={() => generatePhrase(24)}
-                      isConvertDisabled={secret.length < ENTROPY_TARGET_LENGTH}
+                      selectedDie={selectedDie}
+                      onSelectDie={setSelectedDie}
+                      onConvertToSeed={convertDiceRollsToSecret}
                     />
                   )}
 
@@ -556,6 +589,15 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
           sliceIndex={selectedKeySlice}
           totalSlices={Number.parseInt(totalSlices)}
           onClose={() => setSelectedKeySlice(null)}
+        />
+        <EntropyCollector
+          open={showEntropyCollector}
+          onClose={() => {
+            setShowEntropyCollector(false)
+            setPendingWordCount(null)
+          }}
+          onComplete={handleEntropyCollected}
+          targetBits={pendingWordCount === 12 ? 128 : 256}
         />
       </TooltipProvider>
     )
