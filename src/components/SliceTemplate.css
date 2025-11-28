@@ -49,21 +49,32 @@
 .decorative-circle {
   width: 2in;
   height: 2in;
-  border: 3px solid #000;
+  border: none;
   border-radius: 50%;
   position: relative;
 }
 
 .decorative-circle::before {
-  content: '';
+  display: none;
+}
+
+.logo-content {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 1.5in;
-  height: 1.5in;
-  border: 2px dashed #000;
-  border-radius: 50%;
+  width: 1.9in;
+  height: 1.9in;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.logo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 /* Body Section */
@@ -202,17 +213,6 @@
 
 /* Print Styles */
 @media print {
-  .slice-template {
-    margin: 0;
-    padding: 0.75in;
-    page-break-after: always;
-    border: 2px solid #000;
-  }
-
-  .slice-template:last-child {
-    page-break-after: auto;
-  }
-
   @page {
     size: letter;
     margin: 0;
@@ -221,6 +221,72 @@
   body {
     margin: 0;
     padding: 0;
+  }
+
+  .slice-template {
+    margin: 0;
+    padding: 0.6in 0.75in;
+    page-break-after: avoid;
+    page-break-before: avoid;
+    page-break-inside: avoid;
+    border: 2px solid #000;
+    height: 11in;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .slice-header {
+    page-break-after: avoid;
+    flex-shrink: 0;
+    margin-bottom: 0.3in;
+    padding-bottom: 0.15in;
+  }
+  
+  .slice-body {
+    flex: 1;
+    page-break-inside: avoid;
+    min-height: auto;
+    display: flex;
+    gap: 0.4in;
+    margin-bottom: 0.3in;
+  }
+  
+  .slice-column-left,
+  .slice-column-right {
+    page-break-inside: avoid;
+    gap: 0.3in;
+  }
+  
+  .slice-column-left {
+    padding-right: 0.4in;
+  }
+  
+  .data-section {
+    page-break-inside: avoid;
+    margin-bottom: 0.3in;
+    gap: 0.1in;
+  }
+  
+  .field-group {
+    page-break-inside: avoid;
+    gap: 0.1in;
+  }
+  
+  .instructions-field {
+    min-height: 1.5in;
+  }
+  
+  .slice-footer {
+    flex-shrink: 0;
+    page-break-before: avoid;
+    position: relative;
+    bottom: auto;
+    margin-top: auto;
+    padding-top: 0.2in;
+  }
+  
+  .footer-border {
+    margin-bottom: 0.1in;
   }
 }
 
