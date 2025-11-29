@@ -64,6 +64,7 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
     const [selectedQrAddress, setSelectedQrAddress] = useState<string | null>(null)
     const [selectedKeySlice, setSelectedKeySlice] = useState<number | null>(null)
     const [slices, setSlices] = useState<Array<{ share: string; qrCode: string; index: number }>>([])
+    const [currentSliceData, setCurrentSliceData] = useState<{ share: string; qrCode: string; index: number } | null>(null)
     const [walletAddress, setWalletAddress] = useState<string>("")
     const [walletPublicKey, setWalletPublicKey] = useState<string>("")
     const [generatedDate, setGeneratedDate] = useState<Date>(new Date())
@@ -93,6 +94,50 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
         setRequiredSlices(required)
       },
     }))
+
+    // Regenerate slice data when selectedKeySlice changes and slice doesn't exist
+    useEffect(() => {
+      const regenerateSlice = async () => {
+        if (selectedKeySlice === null || !secret.trim()) {
+          setCurrentSliceData(null)
+          return
+        }
+
+        // Check if slice exists in the slices array
+        const existingSlice = slices[selectedKeySlice]
+        if (existingSlice) {
+          setCurrentSliceData(existingSlice)
+          return
+        }
+
+        // Slice doesn't exist, regenerate it
+        try {
+          const total = Number.parseInt(totalSlices)
+          const required = Number.parseInt(requiredSlices)
+          
+          // Split the secret into shares with current settings
+          const shareStrings = await splitSecret(secret.trim(), total, required)
+          
+          // Get the specific slice we need
+          const share = shareStrings[selectedKeySlice]
+          if (share) {
+            // Generate QR code for this slice
+            const qrCode = await generateQRCodeDataURL(share, { width: 400, errorCorrectionLevel: 'H' })
+            
+            setCurrentSliceData({
+              share,
+              qrCode,
+              index: selectedKeySlice + 1
+            })
+          }
+        } catch (error) {
+          console.error("Error regenerating slice for preview:", error)
+          setCurrentSliceData(null)
+        }
+      }
+
+      regenerateSlice()
+    }, [selectedKeySlice, secret, totalSlices, requiredSlices, slices])
 
     // Convert dice rolls to mnemonic or private key
     // IMPORTANT: This is PURELY DETERMINISTIC - NO PRNG is used
@@ -818,21 +863,36 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
                       </p>
                       <Button
                         className="w-full bg-black hover:bg-black/90 text-white"
-                        onClick={() => {
-                          if (onPrintCompleteKit) {
-                            // Prepare slice data for printing
-                            const sliceData = slices.map(slice => ({
-                              index: slice.index,
-                              share: slice.share,
-                              totalSlices: Number.parseInt(totalSlices),
-                              threshold: Number.parseInt(requiredSlices),
-                              walletAddress,
-                              walletPublicKey,
-                              walletLabel: filenamePrefix.replace(/_\d+_$/, ""),
-                              generatedOn: generatedDate,
-                              visualMarker
-                            }))
-                            onPrintCompleteKit(sliceData)
+                        onClick={async () => {
+                          if (onPrintCompleteKit && secret.trim()) {
+                            try {
+                              // Regenerate slices on-the-fly to ensure we have the correct number
+                              const total = Number.parseInt(totalSlices)
+                              const required = Number.parseInt(requiredSlices)
+                              
+                              // Split the secret into shares with current settings
+                              const shareStrings = await splitSecret(secret.trim(), total, required)
+                              
+                              // Prepare slice data for printing
+                              const sliceData = shareStrings.map((share, index) => ({
+                                index: index + 1,
+                                share,
+                                totalSlices: total,
+                                threshold: required,
+                                walletAddress,
+                                walletPublicKey,
+                                walletLabel: filenamePrefix.replace(/_\d+_$/, ""),
+                                generatedOn: generatedDate,
+                                visualMarker
+                              }))
+                              
+                              onPrintCompleteKit(sliceData)
+                            } catch (error) {
+                              toast.error("Failed to generate slices for printing. Please regenerate your slices first.")
+                              console.error("Error generating slices for print:", error)
+                            }
+                          } else if (!secret.trim()) {
+                            toast.error("Please generate slices first before printing")
                           }
                         }}
                       >
@@ -857,7 +917,7 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
           sliceIndex={selectedKeySlice}
           totalSlices={Number.parseInt(totalSlices)}
           requiredSlices={Number.parseInt(requiredSlices)}
-          sliceData={selectedKeySlice !== null ? slices[selectedKeySlice] : null}
+          sliceData={currentSliceData}
           walletAddress={walletAddress}
           walletPublicKey={walletPublicKey}
           walletLabel={filenamePrefix.replace(/_\d+_$/, "")} // Remove timestamp suffix
