@@ -11,7 +11,7 @@ interface EntropyCollectorProps {
   targetBits: number // 128 for 12 words, 256 for 24 words
 }
 
-export function EntropyCollector({ open, onClose, onComplete, targetBits }: EntropyCollectorProps) {
+export function EntropyCollector({ open, onClose, onComplete }: EntropyCollectorProps) {
   const [entropyProgress, setEntropyProgress] = useState(0)
   const [isCollecting, setIsCollecting] = useState(false)
   const entropyBufferRef = useRef<number[]>([])
@@ -20,8 +20,6 @@ export function EntropyCollector({ open, onClose, onComplete, targetBits }: Entr
   const keyboardEntropyRef = useRef<number[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Minimum entropy bits needed (we'll collect more than needed for safety)
-  const minEntropyBytes = Math.ceil(targetBits / 8)
   // Require significant user interaction - collect 2048 bytes of user entropy
   const targetEntropyBytes = 2048
   const lastCollectTimeRef = useRef<number>(0)
@@ -89,10 +87,6 @@ export function EntropyCollector({ open, onClose, onComplete, targetBits }: Entr
     setIsCollecting(false)
   }
 
-  const handleStart = () => {
-    reset()
-    setIsCollecting(true)
-  }
 
   // Mouse movement handler (only on window, not on div to avoid double collection)
   useEffect(() => {
@@ -158,9 +152,13 @@ export function EntropyCollector({ open, onClose, onComplete, targetBits }: Entr
     return () => window.removeEventListener("keypress", handleKeyPress)
   }, [open, isCollecting, collectEntropy])
 
-  // Reset when dialog closes
+  // Start collecting automatically when dialog opens, reset when it closes
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      reset()
+      // Start collecting immediately when dialog opens
+      setIsCollecting(true)
+    } else {
       reset()
     }
   }, [open])
@@ -188,15 +186,16 @@ export function EntropyCollector({ open, onClose, onComplete, targetBits }: Entr
             )}
             // Mouse move on div is handled by window listener to avoid double collection
           >
-            {!isCollecting ? (
-              <p className="text-muted-foreground text-center px-4">
-                Click "Start Collecting" and move your mouse, type, or slide your finger here
-              </p>
-            ) : (
-              <p className="text-primary font-semibold text-center px-4">
-                Keep moving your mouse, typing, or sliding your finger...
-              </p>
-            )}
+            <p className={cn(
+              "text-center px-4",
+              isCollecting 
+                ? "text-primary font-semibold" 
+                : "text-muted-foreground"
+            )}>
+              {isCollecting 
+                ? "Move your mouse, type, or slide your finger to add randomness..."
+                : "Starting entropy collection..."}
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -210,15 +209,11 @@ export function EntropyCollector({ open, onClose, onComplete, targetBits }: Entr
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            {isCollecting ? "Cancel Collection" : "Cancel"}
+            Cancel
           </Button>
-          {!isCollecting ? (
-            <Button onClick={handleStart}>Start Collecting</Button>
-          ) : (
-            <Button onClick={finishCollection} disabled={!canFinish}>
-              {canFinish ? "Use This Entropy" : "Collecting..."}
-            </Button>
-          )}
+          <Button onClick={finishCollection} disabled={!canFinish}>
+            {canFinish ? "Use This Entropy" : "Collecting..."}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

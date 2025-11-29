@@ -1,16 +1,336 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { MainInterface, type MainInterfaceHandle } from './components/main-interface'
-import { Toaster } from "sonner"
+import { Toaster, toast } from "sonner"
+import SliceTemplate from './components/SliceTemplate'
 import './App.css'
 
 function App() {
   const [activeTab, setActiveTab] = useState("about")
   const mainInterfaceRef = useRef<MainInterfaceHandle>(null)
+  const [printSlices, setPrintSlices] = useState<any[]>([])
+  const [shouldPrint, setShouldPrint] = useState(false)
 
   const handleKeySliceFilesClick = () => {
     setActiveTab("about")
     // Could trigger tour widget here if needed
   }
+
+  const handlePrintCompleteKit = (slices: any[]) => {
+    setPrintSlices(slices)
+    setShouldPrint(true)
+  }
+
+  // Trigger print after the print-only section has been rendered
+  useEffect(() => {
+    if (shouldPrint && printSlices.length > 0) {
+      // Create a new window with just the print content
+      const printWindow = window.open('', '_blank', 'width=800,height=600')
+
+      if (printWindow) {
+        // Generate the HTML for printing
+        const printHTML = `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Secret Pizza - Key Slices</title>
+              <style>
+                @page {
+                  size: 8.5in 11in;
+                  margin: 0;
+                }
+                body {
+                  margin: 0;
+                  padding: 0;
+                  font-family: 'Times New Roman', serif;
+                  background: white;
+                }
+                .slice-template {
+                  width: 8.5in;
+                  height: 11in;
+                  background: white;
+                  border: 2px solid #000;
+                  padding: 0.75in;
+                  margin: 0 auto;
+                  font-family: 'Times New Roman', serif;
+                  color: #000;
+                  position: relative;
+                  box-sizing: border-box;
+                  display: flex;
+                  flex-direction: column;
+                  page-break-inside: avoid !important;
+                  page-break-before: avoid !important;
+                  page-break-after: avoid !important;
+                }
+                .slice-template:not(:last-child) {
+                  page-break-after: always !important;
+                }
+                .slice-template:last-child {
+                  page-break-after: avoid !important;
+                }
+                /* All the slice styling... */
+                .slice-header {
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: flex-start;
+                  margin-bottom: 0.3in;
+                  border-bottom: 2px solid #000;
+                  padding-bottom: 0.15in;
+                  page-break-after: avoid;
+                  flex-shrink: 0;
+                }
+                .slice-header-left {
+                  display: flex;
+                  flex-direction: column;
+                  gap: 0.25in;
+                }
+                .slice-title {
+                  font-size: 24pt;
+                  font-weight: bold;
+                  text-transform: lowercase;
+                  letter-spacing: 1px;
+                }
+                .key-icon {
+                  font-size: 48pt;
+                  line-height: 1;
+                }
+                .slice-header-center {
+                  flex: 1;
+                  display: flex;
+                  justify-content: center;
+                  align-items: center;
+                }
+                .decorative-circle {
+                  width: 2in;
+                  height: 2in;
+                  border: none;
+                  border-radius: 50%;
+                  position: relative;
+                }
+                .logo-content {
+                  position: absolute;
+                  top: 50%;
+                  left: 50%;
+                  transform: translate(-50%, -50%);
+                  width: 1.9in;
+                  height: 1.9in;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  z-index: 1;
+                }
+                .logo-image {
+                  width: 100%;
+                  height: 100%;
+                  object-fit: contain;
+                }
+                .slice-body {
+                  display: flex;
+                  gap: 0.3in; /* Reduced from 0.4in */
+                  margin-bottom: 0.4in; /* Reduced from 0.5in */
+                  flex: 1;
+                  page-break-inside: avoid;
+                }
+                .slice-column-left,
+                .slice-column-right {
+                  flex: 1;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 0.3in;
+                  page-break-inside: avoid;
+                }
+                .slice-column-left {
+                  border-right: 1px solid #000;
+                  padding-right: 0.4in;
+                  height: calc(100% - 0.8in); /* Shorter than full height */
+                }
+                .field-group {
+                  display: flex;
+                  flex-direction: column;
+                  gap: 0.125in;
+                }
+                .field-label {
+                  font-size: 10pt;
+                  font-weight: bold;
+                  text-transform: lowercase;
+                  letter-spacing: 0.5px;
+                  border-bottom: 1px solid #000;
+                  padding-bottom: 0.05in;
+                }
+                .field-value {
+                  font-size: 11pt;
+                  line-height: 1.4;
+                  min-height: 0.5in;
+                  padding: 0.1in;
+                  border: 1px solid #000;
+                  font-family: 'Courier New', monospace;
+                }
+                .instructions-field {
+                  min-height: 1.2in; /* Reduced from 2in */
+                  white-space: pre-wrap;
+                  word-wrap: break-word;
+                }
+                .data-section {
+                  display: flex;
+                  flex-direction: column;
+                  gap: 0.125in;
+                  margin-bottom: 0.2in; /* Reduced from 0.5in */
+                }
+                .data-label {
+                  font-size: 10pt;
+                  font-weight: bold;
+                  text-transform: lowercase;
+                  letter-spacing: 0.5px;
+                  border-bottom: 1px solid #000;
+                  padding-bottom: 0.05in;
+                }
+                .data-content {
+                  display: flex;
+                  gap: 0.25in;
+                  align-items: flex-start;
+                }
+                .data-text {
+                  flex: 1;
+                  font-family: 'Courier New', monospace;
+                  font-size: 8pt;
+                  line-height: 1.3;
+                  word-break: break-all;
+                }
+                .data-text pre {
+                  margin: 0;
+                  white-space: pre-wrap;
+                  word-wrap: break-word;
+                }
+                .data-qr {
+                  flex-shrink: 0;
+                  width: 1.5in;
+                  height: 1.5in;
+                  border: 1px solid #000;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  padding: 0.1in;
+                  background: white;
+                }
+                .slice-footer {
+                  position: absolute;
+                  bottom: 0.5in;
+                  left: 0.75in;
+                  right: 0.75in;
+                  height: 0.75in;
+                  page-break-before: avoid;
+                }
+                .footer-border {
+                  border-top: 1px solid #000;
+                  margin-bottom: 0.125in;
+                }
+                .footer-notice {
+                  font-size: 8pt;
+                  text-align: center;
+                  text-transform: lowercase;
+                  color: #000;
+                  line-height: 1.4;
+                }
+              </style>
+            </head>
+            <body>
+              ${printSlices.map(slice => `
+                <div class="slice-template">
+                  <div class="slice-header">
+                    <div class="slice-header-left">
+                      <div class="slice-title">key slice ${slice.index} of ${slice.totalSlices || printSlices.length}</div>
+                      <div class="key-icon">🍕</div>
+                    </div>
+                    <div class="slice-header-center">
+                      <div class="decorative-circle">
+                        <div class="logo-content">
+                          <img src="/images/shamir-logo.png" alt="Secret Pizza" class="logo-image" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="slice-body">
+                    <div class="slice-column-left">
+                      <div class="field-group">
+                        <label class="field-label">wallet label</label>
+                        <div class="field-value">${slice.walletLabel || 'coldpizza'}</div>
+                      </div>
+                      <div class="field-group">
+                        <label class="field-label">instructions</label>
+                        <div class="field-value instructions-field">
+                          Keep this key slice secure. You will need at least ${slice.threshold || Math.ceil(printSlices.length / 2)} of ${slice.totalSlices || printSlices.length} slices to restore the wallet.
+                        </div>
+                      </div>
+                    </div>
+                    <div class="slice-column-right">
+                      <div class="data-section">
+                        <label class="data-label">key slice data</label>
+                        <div class="data-content">
+                          <div class="data-text">
+                            <pre>${slice.share}</pre>
+                          </div>
+                          <div class="data-qr">
+                            <div style="font-size: 8pt; text-align: center; color: #666; padding: 0.5in;">
+                              QR Code would be here
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="data-section">
+                        <label class="data-label">primary address</label>
+                        <div class="data-content">
+                          <div class="data-text">
+                            <pre>${slice.walletAddress || "N/A - Address not available"}</pre>
+                          </div>
+                          <div class="data-qr">
+                            <div style="font-size: 8pt; text-align: center; color: #666; padding: 0.5in;">
+                              QR Code would be here
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="field-group">
+                        <label class="field-label">generated on</label>
+                        <div class="field-value">${new Date(slice.generatedOn || new Date()).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="slice-footer">
+                    <div class="footer-border"></div>
+                    <div class="footer-notice">
+                      keep this key slice secure, whoever gave it to you will ask for it in the future. read more on secretpizza.org
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </body>
+          </html>
+        `
+
+        printWindow.document.write(printHTML)
+        printWindow.document.close()
+
+        // Wait for content to load, then print
+        setTimeout(() => {
+          printWindow.print()
+          printWindow.close()
+        }, 200)
+
+        // Clean up state
+        setPrintSlices([])
+        setShouldPrint(false)
+
+        toast.info("Print Complete Kit", {
+          description: "Choose 'Save as PDF' to download all slices",
+        })
+      }
+    }
+  }, [shouldPrint, printSlices])
 
   return (
     <div className="min-h-screen relative pb-24 md:pb-0 bg-muted">
@@ -45,9 +365,66 @@ function App() {
             activeTab={activeTab}
             onTabChange={setActiveTab}
             onKeySliceFilesClick={handleKeySliceFilesClick}
+            onPrintCompleteKit={handlePrintCompleteKit}
           />
         </main>
+
+        {/* Print-only section for complete kit */}
+        <div id="print-only-container" style={{ display: 'none' }}>
+          {printSlices.map((slice) => (
+            <SliceTemplate
+              key={slice.index}
+              sliceNumber={slice.index}
+              totalSlices={slice.totalSlices || printSlices.length}
+              threshold={slice.threshold || Math.ceil(printSlices.length / 2)}
+              shareData={slice.share}
+              walletAddress={slice.walletAddress || "N/A - Address not available"}
+              walletPublicKey={slice.walletPublicKey}
+              walletLabel={slice.walletLabel || "coldpizza"}
+              generatedOn={slice.generatedOn || new Date()}
+              visualMarker={slice.visualMarker || "pizza"}
+            />
+          ))}
+        </div>
+
       </div>
+
+      <style>{`
+        @media print {
+          @page {
+            size: letter;
+            margin: 0;
+          }
+
+          /* When printing complete kit, hide everything except print container */
+          html.printing-complete-kit body > * {
+            display: none !important;
+          }
+
+          html.printing-complete-kit #print-only-container {
+            display: block !important;
+            position: static !important;
+            width: 100% !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          /* Ensure each slice is on its own page */
+          #print-only-container .slice-template {
+            display: flex !important;
+            page-break-inside: avoid !important;
+          }
+
+          #print-only-container .slice-template:not(:last-child) {
+            page-break-after: always !important;
+          }
+
+          #print-only-container .slice-template:last-child {
+            page-break-after: avoid !important;
+          }
+        }
+      `}</style>
 
       <Toaster />
     </div>

@@ -5,11 +5,11 @@ import { useIsMobile } from "@/hooks/use-mobile"
 
 interface PresetButtonsProps {
   onPresetClick: (total: string, required: string) => void
-  showAdvancedOptions: boolean
-  onToggleAdvancedOptions: () => void
+  totalSlices: string
+  requiredSlices: string
 }
 
-export function PresetButtons({ onPresetClick, showAdvancedOptions, onToggleAdvancedOptions }: PresetButtonsProps) {
+export function PresetButtons({ onPresetClick, totalSlices, requiredSlices }: PresetButtonsProps) {
   const isMobile = useIsMobile()
 
   const presets = [
@@ -41,43 +41,38 @@ export function PresetButtons({ onPresetClick, showAdvancedOptions, onToggleAdva
       <div className="space-y-2">
         <div className="flex justify-center">
           <div className="flex flex-col gap-2 items-start">
-            {presets.map((preset) => (
-              <Tooltip key={preset.label}>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs border-2 border-red-200 text-primary hover:bg-primary/20 hover:text-primary min-w-40"
-                      onClick={() => {
-                        onPresetClick(preset.total, preset.required)
-                        if (isMobile) {
-                          toast.info(preset.description)
+            {presets.map((preset) => {
+              const isSelected = totalSlices === preset.total && requiredSlices === preset.required
+              return (
+                <Tooltip key={preset.label}>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant={isSelected ? "default" : "ghost"}
+                        size="sm"
+                        className={isSelected 
+                          ? "text-xs border-2 border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground min-w-40"
+                          : "text-xs border-2 border-red-200 text-primary hover:bg-primary/20 hover:text-primary min-w-40"
                         }
-                      }}
-                    >
-                      {preset.label}
-                    </Button>
-                    <span className="text-xs text-muted-foreground">{preset.shortDesc}</span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{preset.description}</p>
-                </TooltipContent>
-              </Tooltip>
-            ))}
+                        onClick={() => {
+                          onPresetClick(preset.total, preset.required)
+                          if (isMobile) {
+                            toast.info(preset.description)
+                          }
+                        }}
+                      >
+                        {preset.label}
+                      </Button>
+                      <span className="text-xs text-muted-foreground">{preset.shortDesc}</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{preset.description}</p>
+                  </TooltipContent>
+                </Tooltip>
+              )
+            })}
           </div>
-        </div>
-
-        <div className="flex justify-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full text-xs bg-stone-100   text-muted-foreground hover:bg-primary/20 hover:text-foreground  mb-4 mt-8"
-            onClick={onToggleAdvancedOptions}
-          >
-            {showAdvancedOptions ? "Hide" : "Show"} advanced options
-          </Button>
         </div>
       </div>
     </TooltipProvider>

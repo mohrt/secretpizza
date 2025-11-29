@@ -7,11 +7,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Progress } from "@/components/ui/progress"
-import { Info, Pizza, Dice3, Download, Key } from "lucide-react"
+import { Info, Pizza, Dice3, Key, Printer } from "lucide-react"
 import { entropyToMnemonic } from "@scure/bip39"
 import { wordlist } from "@scure/bip39/wordlists/english.js"
 import { PrivateKey } from "@bsv/sdk"
 import { diceRollsToMnemonic, diceRollsToPrivateKey } from "@/utils/dice2mnemonic"
+import { splitSecret } from "@/utils/shamir"
+import { generateQRCodeDataURL } from "@/utils/qrcode"
+import { deriveAddressesFromMnemonic } from "@/utils/wallet"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -34,17 +37,17 @@ export interface MainInterfaceHandle {
   setShowRollArea: (show: boolean) => void
   enableDice: (dice: DieType[]) => void
   setPreset: (total: string, required: string) => void
-  setShowAdvancedOptions: (show: boolean) => void
 }
 
 interface MainInterfaceProps {
   activeTab?: string
   onTabChange?: (value: string) => void
   onKeySliceFilesClick?: () => void
+  onPrintCompleteKit?: (slices: any[]) => void
 }
 
 export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>(
-  ({ activeTab, onTabChange, onKeySliceFilesClick }, ref) => {
+  ({ activeTab, onTabChange, onKeySliceFilesClick, onPrintCompleteKit }, ref) => {
     const isMobile = useIsMobile()
 
     // State management
@@ -56,15 +59,23 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
     const [showRollArea, setShowRollArea] = useState(false)
     const [isGenerating, setIsGenerating] = useState(false)
     const [showResults, setShowResults] = useState(false)
-    const [visibleAddresses, setVisibleAddresses] = useState(5)
-    const [addresses, setAddresses] = useState<Array<{ id: number; address: string; used: boolean }>>([])
+    const [addressCount, setAddressCount] = useState("5")
+    const [addresses, setAddresses] = useState<Array<{ id: number; address: string }>>([])
     const [selectedQrAddress, setSelectedQrAddress] = useState<string | null>(null)
     const [selectedKeySlice, setSelectedKeySlice] = useState<number | null>(null)
-    const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
+    const [slices, setSlices] = useState<Array<{ share: string; qrCode: string; index: number }>>([])
+    const [walletAddress, setWalletAddress] = useState<string>("")
+    const [walletPublicKey, setWalletPublicKey] = useState<string>("")
+    const [generatedDate, setGeneratedDate] = useState<Date>(new Date())
+    const [isMnemonic, setIsMnemonic] = useState(false)
+    const [showAddresses, setShowAddresses] = useState(false)
+    // BSV standard BIP44 derivation path: m/44'/236'/0'/0 (coin type 236 is BSV)
+    const [derivationPath, setDerivationPath] = useState("m/44'/236'/0'/0")
 
     const [selectedDie, setSelectedDie] = useState<DieType | null>(null)
     const [showEntropyCollector, setShowEntropyCollector] = useState(false)
     const [pendingWordCount, setPendingWordCount] = useState<12 | 24 | null>(null)
+    const [cachedEntropy, setCachedEntropy] = useState<Uint8Array | null>(null)
 
     const ENTROPY_TARGET_LENGTH = 50
 
@@ -81,7 +92,6 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
         setTotalSlices(total)
         setRequiredSlices(required)
       },
-      setShowAdvancedOptions: (show) => setShowAdvancedOptions(show),
     }))
 
     // Convert dice rolls to mnemonic or private key
@@ -93,6 +103,8 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
           // Use dice2mnemonic algorithm (matches Python script exactly)
           const mnemonic = diceRollsToMnemonic(rolls, dieType, seedLength)
           setSecret(mnemonic)
+          setIsMnemonic(true)
+          setShowAddresses(false) // Don't show addresses by default
           toast.success(`Generated ${seedLength}-word mnemonic phrase from dice rolls`)
         } else {
           // Convert to private key (deterministic)
@@ -123,7 +135,31 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
     }
 
     const generatePhrase = (words: 12 | 24) => {
-      // Open entropy collector dialog
+      // Check if we already have cached entropy
+      if (cachedEntropy && cachedEntropy.length >= 32) {
+        // Use cached entropy as additional seed for crypto PRNG
+        // Generate fresh random bytes each time
+        const requiredBytes = words === 12 ? 16 : 32
+        
+        // Generate fresh crypto random bytes
+        const freshEntropy = new Uint8Array(requiredBytes)
+        crypto.getRandomValues(freshEntropy)
+        
+        // Mix cached entropy with fresh crypto entropy (XOR)
+        const finalEntropy = new Uint8Array(requiredBytes)
+        for (let i = 0; i < requiredBytes; i++) {
+          finalEntropy[i] = freshEntropy[i] ^ cachedEntropy[i % cachedEntropy.length]
+        }
+        
+        const mnemonic = entropyToMnemonic(finalEntropy, wordlist)
+        setSecret(mnemonic)
+        setIsMnemonic(true)
+        setShowAddresses(false) // Don't show addresses by default
+        toast.success(`Generated ${words}-word mnemonic phrase`)
+        return
+      }
+      
+      // No cached entropy, need to collect it
       setPendingWordCount(words)
       setShowEntropyCollector(true)
     }
@@ -132,13 +168,27 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
       if (!pendingWordCount) return
       
       try {
-        // Use the collected entropy to generate mnemonic
-        // entropyToMnemonic requires exactly 16 bytes (128 bits) for 12 words or 32 bytes (256 bits) for 24 words
+        // Cache the entropy for reuse during this session
+        setCachedEntropy(entropy)
+        
+        // Use cached entropy as additional seed for crypto PRNG
+        // Generate fresh random bytes each time
         const requiredBytes = pendingWordCount === 12 ? 16 : 32
-        const finalEntropy = entropy.slice(0, requiredBytes)
+        
+        // Generate fresh crypto random bytes
+        const freshEntropy = new Uint8Array(requiredBytes)
+        crypto.getRandomValues(freshEntropy)
+        
+        // Mix cached entropy with fresh crypto entropy (XOR)
+        const finalEntropy = new Uint8Array(requiredBytes)
+        for (let i = 0; i < requiredBytes; i++) {
+          finalEntropy[i] = freshEntropy[i] ^ entropy[i % entropy.length]
+        }
         
         const mnemonic = entropyToMnemonic(finalEntropy, wordlist)
         setSecret(mnemonic)
+        setIsMnemonic(true)
+        setShowAddresses(false) // Don't show addresses by default
         setShowEntropyCollector(false)
         setPendingWordCount(null)
         toast.success(`Generated ${pendingWordCount}-word mnemonic phrase`)
@@ -194,34 +244,118 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
     }
 
     const handleGenerateSlices = async () => {
+      if (!secret.trim()) {
+        toast.error("Please enter a secret (mnemonic phrase or private key) first")
+        return
+      }
+
       setIsGenerating(true)
       setShowResults(false)
 
-      const response = await fetch("/addresses.json")
-      const data = await response.json()
-      // Handle both old array format and new object format
-      const addressList = Array.isArray(data) ? data : data.addresses
-      setAddresses(addressList)
+      try {
+        const total = Number.parseInt(totalSlices)
+        const required = Number.parseInt(requiredSlices)
 
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+        // Split the secret into shares
+        const shareStrings = await splitSecret(secret.trim(), total, required)
 
-      setIsGenerating(false)
-      setShowResults(true)
-    }
+        // Generate QR codes for each share
+        const slicesWithQR = await Promise.all(
+          shareStrings.map(async (share, index) => ({
+            share,
+            qrCode: await generateQRCodeDataURL(share, { width: 400, errorCorrectionLevel: 'H' }),
+            index: index + 1,
+          }))
+        )
 
-    const handleAddressToggle = (id: number) => {
-      const newAddresses = [...addresses]
-      const index = addresses.findIndex((a) => a.id === id)
-      newAddresses[index] = {
-        ...newAddresses[index],
-        used: !newAddresses[index].used,
+        setSlices(slicesWithQR)
+
+        // Derive public key and address based on secret type
+        if (isMnemonic) {
+          try {
+            // Derive addresses from mnemonic using the specified derivation path
+            const count = Number.parseInt(addressCount) || 5
+            const { addresses: addressesList, firstPublicKey } = await deriveAddressesFromMnemonic(secret.trim(), derivationPath, count)
+            
+            // Store the primary wallet address and public key (first derived address)
+            setWalletAddress(addressesList[0])
+            setWalletPublicKey(firstPublicKey)
+            
+            const addressesWithQR = await Promise.all(
+              addressesList.map(async (address, index) => ({
+                id: index + 1,
+                address,
+              }))
+            )
+            setAddresses(addressesWithQR)
+          } catch (error) {
+            // Address generation failed, but slices were generated successfully
+            console.error("Error generating addresses from mnemonic:", error)
+            setWalletAddress("")
+            setWalletPublicKey("")
+            setAddresses([])
+          }
+        } else {
+          // Try to parse as private key and derive public key
+          try {
+            const privateKey = PrivateKey.fromString(secret.trim())
+            const publicKey = privateKey.toPublicKey()
+            const address = publicKey.toAddress()
+            
+            setWalletAddress(address)
+            setWalletPublicKey(publicKey.toString())
+            setAddresses([]) // Don't show addresses for private keys
+          } catch (error) {
+            // Not a valid private key, clear wallet info
+            setWalletAddress("")
+            setWalletPublicKey("")
+            setAddresses([])
+          }
+        }
+        
+        // Store the generation date
+        setGeneratedDate(new Date())
+
+        setIsGenerating(false)
+        setShowResults(true)
+        toast.success(`Successfully generated ${total} key slices`)
+      } catch (error) {
+        console.error("Error generating slices:", error)
+        toast.error("Failed to generate slices. Please try again.")
+        setIsGenerating(false)
       }
-      setAddresses(newAddresses)
     }
+
 
     const handlePresetClick = (total: string, required: string) => {
       setTotalSlices(total)
       setRequiredSlices(required)
+    }
+
+    const handleAddressCountChange = async (newCount: string) => {
+      setAddressCount(newCount)
+      
+      // Regenerate addresses if we have a mnemonic
+      if (isMnemonic && secret.trim()) {
+        try {
+          const count = Number.parseInt(newCount) || 5
+          const { addresses: addressesList, firstPublicKey } = await deriveAddressesFromMnemonic(secret.trim(), derivationPath, count)
+          
+          setWalletAddress(addressesList[0])
+          setWalletPublicKey(firstPublicKey)
+          
+          const addressesWithQR = await Promise.all(
+            addressesList.map(async (address, index) => ({
+              id: index + 1,
+              address,
+            }))
+          )
+          setAddresses(addressesWithQR)
+        } catch (error) {
+          console.error("Error regenerating addresses:", error)
+          toast.error("Failed to regenerate addresses")
+        }
+      }
     }
 
     const showTooltip = (message: string) => {
@@ -355,7 +489,19 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
                     <Textarea
                       id="secret"
                       value={secret}
-                      onChange={(e) => setSecret(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        setSecret(value)
+                        // Detect if it's a mnemonic phrase (12 or 24 words)
+                        const words = value.trim().split(/\s+/)
+                        const isMnemonicPhrase = (words.length === 12 || words.length === 24) && 
+                          words.every(word => /^[a-z]+$/.test(word.toLowerCase()))
+                        setIsMnemonic(isMnemonicPhrase)
+                        if (!isMnemonicPhrase) {
+                          setShowAddresses(false)
+                          setAddresses([])
+                        }
+                      }}
                       placeholder={
                         selectedDie
                           ? `Enter your ${selectedDie} roll results here`
@@ -363,6 +509,7 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
                       }
                       className="min-h-[120px] font-mono text-sm resize-y"
                     />
+                    
 
                     {showRollArea && (
                       <div className="space-y-1">
@@ -393,21 +540,18 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
 
                   <PresetButtons
                     onPresetClick={handlePresetClick}
-                    showAdvancedOptions={showAdvancedOptions}
-                    onToggleAdvancedOptions={() => setShowAdvancedOptions(!showAdvancedOptions)}
+                    totalSlices={totalSlices}
+                    requiredSlices={requiredSlices}
                   />
 
-                  {showAdvancedOptions && (
-                    <SliceConfigSliders
-                      totalSlices={totalSlices}
-                      requiredSlices={requiredSlices}
-                      onTotalChange={handleTotalSlicesChange}
-                      onRequiredChange={handleRequiredSlicesChange}
-                    />
-                  )}
+                  <SliceConfigSliders
+                    totalSlices={totalSlices}
+                    requiredSlices={requiredSlices}
+                    onTotalChange={handleTotalSlicesChange}
+                    onRequiredChange={handleRequiredSlicesChange}
+                  />
 
-                  {showAdvancedOptions && (
-                    <div className="flex flex-col md:flex-row gap-4">
+                  <div className="flex flex-col md:flex-row gap-4">
                       <div className="space-y-2 flex-1">
                         <div className="flex items-center gap-2 justify-between">
                           <label htmlFor="marker">Visual marker</label>
@@ -474,7 +618,6 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
                         />
                       </div>
                     </div>
-                  )}
 
                   <Button
                     className="w-full bg-black hover:bg-black/90 text-white disabled:bg-black/50 disabled:text-white/70"
@@ -521,18 +664,124 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
                 <CardContent className="space-y-6">
                   <KeySlicePreview
                     totalSlices={Number.parseInt(totalSlices)}
+                    visualMarker={visualMarker}
+                    slices={slices}
                     onSliceClick={(idx) => setSelectedKeySlice(idx)}
                   />
 
-                  <AddressTable
-                    addresses={addresses}
-                    visibleCount={visibleAddresses}
-                    totalSlices={totalSlices}
-                    requiredSlices={requiredSlices}
-                    onAddressToggle={handleAddressToggle}
-                    onQrClick={(address) => setSelectedQrAddress(address)}
-                    onShowMore={() => setVisibleAddresses(addresses.length)}
-                  />
+                  {isMnemonic && addresses.length > 0 && (
+                    <div className="space-y-2">
+                      {showAddresses ? (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-semibold">Address Preview</h3>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setShowAddresses(false)}
+                              className="text-xs"
+                            >
+                              Hide Address Preview
+                            </Button>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="space-y-2 border rounded-lg p-4 bg-muted/30">
+                              <div className="flex items-center gap-2 justify-between">
+                                <label htmlFor="derivation-path" className="text-sm font-medium">
+                                  Derivation Path
+                                </label>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Info className="h-4 w-4 text-muted-foreground" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>BIP32/BIP44 derivation path for address generation. Format: m/44'/236'/0'/0</p>
+                                    <p className="mt-1 text-xs">For BSV, standard path is m/44'/236'/0'/0. Addresses will be derived at /0, /1, /2, etc.</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                              <Input
+                                id="derivation-path"
+                                value={derivationPath}
+                                onChange={async (e) => {
+                                  const newPath = e.target.value
+                                  setDerivationPath(newPath)
+                                  
+                                  // Regenerate addresses when derivation path changes
+                                  if (isMnemonic && secret.trim()) {
+                                    try {
+                                      const count = Number.parseInt(addressCount) || 5
+                                      const { addresses: addressesList, firstPublicKey } = await deriveAddressesFromMnemonic(secret.trim(), newPath, count)
+                                      
+                                      setWalletAddress(addressesList[0])
+                                      setWalletPublicKey(firstPublicKey)
+                                      
+                                      const addressesWithQR = await Promise.all(
+                                        addressesList.map(async (address, index) => ({
+                                          id: index + 1,
+                                          address,
+                                        }))
+                                      )
+                                      setAddresses(addressesWithQR)
+                                    } catch (error) {
+                                      console.error("Error regenerating addresses:", error)
+                                      toast.error("Failed to regenerate addresses with new derivation path")
+                                    }
+                                  }
+                                }}
+                                placeholder="m/44'/236'/0'/0"
+                                className="font-mono text-xs"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Addresses will be derived at: {derivationPath}/0, {derivationPath}/1, {derivationPath}/2, etc.
+                              </p>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <label htmlFor="address-count" className="text-sm font-medium">
+                                Number of addresses:
+                              </label>
+                              <Select value={addressCount} onValueChange={handleAddressCountChange}>
+                                <SelectTrigger id="address-count" className="w-32">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="5">5</SelectItem>
+                                  <SelectItem value="10">10</SelectItem>
+                                  <SelectItem value="15">15</SelectItem>
+                                  <SelectItem value="20">20</SelectItem>
+                                  <SelectItem value="25">25</SelectItem>
+                                  <SelectItem value="50">50</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <AddressTable
+                              addresses={addresses}
+                              visibleCount={addresses.length}
+                              totalSlices={totalSlices}
+                              requiredSlices={requiredSlices}
+                              onQrClick={(address) => setSelectedQrAddress(address)}
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-sm font-medium">Addresses Generated</span>
+                            <span className="text-xs text-muted-foreground">
+                              {addresses.length} address{addresses.length !== 1 ? 'es' : ''} ready to view
+                            </span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowAddresses(true)}
+                          >
+                            View Addresses
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="space-y-3">
                     <h3 className="text-lg font-semibold">Download Kit</h3>
@@ -565,11 +814,30 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
                         />
                       </div>
                       <p className="text-sm text-muted-foreground mb-4">
-                        Download your complete key slices kit including all slices and address information.
+                        Print all slices to PDF. Each slice will be on its own page. Click Print and choose "Save as PDF" to download.
                       </p>
-                      <Button className="w-full bg-black hover:bg-black/90 text-white" onClick={onKeySliceFilesClick}>
-                        <Download className="w-4 h-4 mr-2" />
-                        Download Complete Kit
+                      <Button
+                        className="w-full bg-black hover:bg-black/90 text-white"
+                        onClick={() => {
+                          if (onPrintCompleteKit) {
+                            // Prepare slice data for printing
+                            const sliceData = slices.map(slice => ({
+                              index: slice.index,
+                              share: slice.share,
+                              totalSlices: Number.parseInt(totalSlices),
+                              threshold: Number.parseInt(requiredSlices),
+                              walletAddress,
+                              walletPublicKey,
+                              walletLabel: filenamePrefix.replace(/_\d+_$/, ""),
+                              generatedOn: generatedDate,
+                              visualMarker
+                            }))
+                            onPrintCompleteKit(sliceData)
+                          }
+                        }}
+                      >
+                        <Printer className="w-4 h-4 mr-2" />
+                        Print Complete Kit
                       </Button>
                     </div>
                   </div>
@@ -588,6 +856,13 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
         <KeySliceDialog
           sliceIndex={selectedKeySlice}
           totalSlices={Number.parseInt(totalSlices)}
+          requiredSlices={Number.parseInt(requiredSlices)}
+          sliceData={selectedKeySlice !== null ? slices[selectedKeySlice] : null}
+          walletAddress={walletAddress}
+          walletPublicKey={walletPublicKey}
+          walletLabel={filenamePrefix.replace(/_\d+_$/, "")} // Remove timestamp suffix
+          generatedOn={generatedDate}
+          visualMarker={visualMarker}
           onClose={() => setSelectedKeySlice(null)}
         />
         <EntropyCollector
@@ -599,6 +874,8 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
           onComplete={handleEntropyCollected}
           targetBits={pendingWordCount === 12 ? 128 : 256}
         />
+
+
       </TooltipProvider>
     )
   },

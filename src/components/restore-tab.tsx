@@ -66,11 +66,6 @@ export function RestoreTab({ onKeySliceFilesClick }: RestoreTabProps) {
     return () => window.removeEventListener("resize", updateIndicator)
   }, [innerTab])
 
-  const showTooltip = (message: string) => {
-    if (isMobile) {
-      toast.info(message)
-    }
-  }
 
   const handleScanClick = () => {
     setIsScanning(true)

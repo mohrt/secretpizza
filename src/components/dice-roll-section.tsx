@@ -6,10 +6,9 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
-import { ExternalLink, Circle } from "lucide-react"
+import { ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { useIsMobile } from "@/hooks/use-mobile"
 
 export type DieType = "coin" | "d4" | "d6" | "d8" | "d10" | "d16"
 
@@ -121,7 +120,6 @@ export function DiceRollSection({
   onSelectDie,
   onConvertToSeed,
 }: DiceRollSectionProps) {
-  const isMobile = useIsMobile()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [rollsInput, setRollsInput] = useState("")
   const [outputType, setOutputType] = useState<"mnemonic" | "privateKey">("mnemonic")
@@ -172,11 +170,6 @@ export function DiceRollSection({
     ? Math.min(100, (rollsEntered / minRollsNeeded) * 100)
     : 0
 
-  const showTooltip = (message: string) => {
-    if (isMobile) {
-      toast.info(message)
-    }
-  }
 
   const getDiceInstruction = () => {
     if (!selectedDie) {
@@ -373,7 +366,6 @@ export function DiceRollSection({
                   const currentValue = textarea.value
                   const selectionStart = textarea.selectionStart
                   const selectionEnd = textarea.selectionEnd
-                  const isReplacing = selectionStart !== selectionEnd
                   
                   // Check if this is an insertion (not deletion)
                   const isInsertion = key.length === 1 && !isControlKey

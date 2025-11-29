@@ -8,9 +8,30 @@ interface SliceTemplateProps {
   threshold: number
   shareData: string
   walletAddress: string
+  walletPublicKey?: string
   walletLabel?: string
   instructions?: string
   generatedOn: Date
+  visualMarker?: string
+}
+
+// Visual marker icons for each theme
+const visualMarkerIcons: Record<string, string[]> = {
+  pizza: ['🍕', '🍄', '🧅', '🫒', '🌶️', '🥓', '🧀', '🍅', '🌿', '🥬', '🫑', '🥒', '🌽', '🥕', '🥔', '🥑', '🥩', '🍖', '🦐', '🦑', '🐟', '🐠'],
+  cosmos: ['🪐', '⭐', '🌟', '✨', '💫', '🌙', '☀️', '🌍', '🌎', '🌏', '🔭', '🛸', '👽', '🚀', '🌌', '🌠', '☄️', '🌑', '🌒', '🌓', '🌔', '🌕'],
+  primates: ['🦍', '🦧', '🐵', '🙈', '🙉', '🙊', '🐒', '🦝', '🦁', '🐯', '🐅', '🐆', '🐴', '🦄', '🦓', '🦌', '🦬', '🐂', '🐃', '🐄', '🐎', '🐖'],
+  vehicles: ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🏍️', '🛵', '🚲', '🛴', '🛹', '🛼', '🚁', '✈️'],
+  furniture: ['🪑', '🛋️', '🛏️', '🪣', '🪤', '🪆', '🪡', '🪢', '🪣', '🪝', '🪟', '🪞', '🪟', '🪠', '🪡', '🪢', '🪣', '🪝', '🪟', '🪞', '🪟', '🪠'],
+  instruments: ['🎸', '🎹', '🥁', '🎺', '🎷', '🎤', '🎧', '🎵', '🎶', '🎼', '🎻', '🪘', '🪗', '🪕', '🎹', '🥁', '🎺', '🎷', '🎤', '🎧', '🎵', '🎶'],
+  trees: ['🌳', '🌲', '🌴', '🌵', '🌱', '🌿', '☘️', '🍀', '🍃', '🍂', '🍁', '🌾', '🌺', '🌻', '🌷', '🌹', '🥀', '🌼', '🌸', '🌍', '🌎', '🌏'],
+  colors: ['🎨', '🔴', '🟠', '🟡', '🟢', '🔵', '🟣', '⚫', '⚪', '🟤', '🟥', '🟧', '🟨', '🟩', '🟦', '🟪', '⬛', '⬜', '🟫', '🔶', '🔷', '🔸'],
+  shapes: ['🔷', '🔶', '🔸', '🔹', '🔺', '🔻', '💠', '🔳', '🔲', '⚪', '⚫', '🟠', '🟡', '🟢', '🔵', '🟣', '🟤', '🟥', '🟧', '🟨', '🟩', '🟦'],
+  tools: ['🔨', '🪓', '⛏️', '🪚', '🔧', '🪛', '🔩', '⚙️', '🪤', '🧰', '🧲', '🪜', '⚒️', '🛠️', '🗡️', '⚔️', '🔪', '🗡️', '⚔️', '🪓', '⛏️', '🪚'],
+}
+
+function getVisualMarkerIcon(theme: string, sliceNumber: number): string {
+  const icons = visualMarkerIcons[theme] || visualMarkerIcons.pizza
+  return icons[(sliceNumber - 1) % icons.length]
 }
 
 export default function SliceTemplate({
@@ -19,9 +40,11 @@ export default function SliceTemplate({
   threshold,
   shareData,
   walletAddress,
+  walletPublicKey: _walletPublicKey,
   walletLabel = '',
   instructions = '',
   generatedOn,
+  visualMarker = 'pizza',
 }: SliceTemplateProps) {
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', {
@@ -33,24 +56,22 @@ export default function SliceTemplate({
     })
   }
 
-  const formatShareData = (data: string, lineLength: number = 32) => {
-    const chunks: string[] = []
-    for (let i = 0; i < data.length; i += lineLength) {
-      chunks.push(data.slice(i, i + lineLength))
-    }
-    return chunks.join('\n')
-  }
-
   return (
     <div className="slice-template">
       <div className="slice-header">
         <div className="slice-header-left">
           <div className="slice-title">key slice {sliceNumber} of {totalSlices}</div>
-          <div className="key-icon">🔑</div>
+          <div className="key-icon">{getVisualMarkerIcon(visualMarker, sliceNumber)}</div>
         </div>
         <div className="slice-header-center">
           <div className="decorative-circle">
-            {/* Placeholder for logo/image */}
+            <div className="logo-content">
+              <img 
+                src="/images/shamir-logo.png" 
+                alt="Secret Pizza" 
+                className="logo-image"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -75,7 +96,7 @@ export default function SliceTemplate({
             <label className="data-label">key slice data</label>
             <div className="data-content">
               <div className="data-text">
-                <pre>{formatShareData(shareData)}</pre>
+                <pre>{shareData}</pre>
               </div>
               <div className="data-qr">
                 <SliceQRCode data={shareData} />
@@ -84,7 +105,7 @@ export default function SliceTemplate({
           </div>
 
           <div className="data-section">
-            <label className="data-label">primary public key</label>
+            <label className="data-label">primary address</label>
             <div className="data-content">
               <div className="data-text">
                 <pre>{walletAddress}</pre>

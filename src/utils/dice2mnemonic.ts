@@ -5,7 +5,7 @@
  * This is PURELY DETERMINISTIC - NO PRNG is used
  */
 
-import { entropyToMnemonic, validateMnemonic } from "@scure/bip39"
+import { validateMnemonic } from "@scure/bip39"
 import { wordlist } from "@scure/bip39/wordlists/english.js"
 
 const BIP39_WORDLIST_SIZE = 2048
@@ -170,7 +170,6 @@ export function diceRollsToMnemonic(
     let wordIndex: number
     let attempts = 0
     const maxAttempts = 1000 // Prevent infinite loop
-    const rollIndexBefore = rollIndex.current
     
     while (attempts < maxAttempts) {
       try {
