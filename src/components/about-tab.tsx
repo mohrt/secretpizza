@@ -53,12 +53,12 @@ export function AboutTab() {
                 <ul className="list-disc pl-5 space-y-1 mt-2">
                   <li>
                     <a
-                      href="https://github.com/mohrt/secretcoin"
+                      href="https://github.com/mohrt/secretpizza"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-primary hover:underline inline-flex items-center gap-0.5"
                     >
-                      secretcoin
+                      secretpizza
                       <ExternalLink className="h-3 w-3" />
                     </a>{" "}
                     source, FAQ, setup, and redeem guides.

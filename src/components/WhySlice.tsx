@@ -31,8 +31,8 @@ export default function WhySlice() {
           </p>
           <ul>
             <li>
-              <a href="https://github.com/mohrt/secretcoin" target="_blank" rel="noopener noreferrer">
-                secretcoin
+              <a href="https://github.com/mohrt/secretpizza" target="_blank" rel="noopener noreferrer">
+                secretpizza
               </a>{' '}
               source, FAQ, setup, and redeem guides.
             </li>
