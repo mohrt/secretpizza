@@ -43,43 +43,27 @@ export function AboutTab() {
           </AccordionItem>
 
           <AccordionItem value="what-you-download">
-            <AccordionTrigger className="font-semibold text-card-foreground">2. What you download</AccordionTrigger>
+            <AccordionTrigger className="font-semibold text-card-foreground">2. What you print</AccordionTrigger>
             <AccordionContent>
               <div className="space-y-2 pt-2">
                 <p>
-                  After generating slices you receive a zip file. It contains one folder per slice. Each folder is self
-                  contained and can be handed to a distinct holder.
+                  After generating slices, you can print each slice as a PDF. Each printed slice contains the hex share, QR code, and visual marker needed to recover the secret.
+                </p>
+                <p>
+                  Each slice is self-contained and can be handed to a distinct holder. The slice includes:
                 </p>
                 <ul className="list-disc pl-5 space-y-1 mt-2">
                   <li>
-                    <a
-                      href="https://github.com/mohrt/secretpizza"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline inline-flex items-center gap-0.5"
-                    >
-                      secretpizza
-                      <ExternalLink className="h-3 w-3" />
-                    </a>{" "}
-                    source, FAQ, setup, and redeem guides.
+                    Hex share data for manual entry
                   </li>
                   <li>
-                    A PDF of the slice with hex share, QR share, and a visual marker. Formats: US Letter/A4 printer
-                    paper and a compact layout for Niimbot printers.
+                    QR code for quick scanning during recovery
                   </li>
-                  <li>A PDF with unused addresses generated alongside the slice.</li>
                   <li>
-                    A readme outlining folder contents and steps to create a watch-only wallet in{" "}
-                    <a
-                      href="https://simply.cash"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline inline-flex items-center gap-0.5"
-                    >
-                      simply.cash
-                      <ExternalLink className="h-3 w-3" />
-                    </a>{" "}
-                    using the xpub tied to that slice's wallet.
+                    Visual marker to identify the slice
+                  </li>
+                  <li>
+                    Primary wallet address for verification
                   </li>
                 </ul>
               </div>
@@ -91,20 +75,7 @@ export function AboutTab() {
             <AccordionContent>
               <div className="space-y-2 pt-2">
                 <p>
-                  Niimbot label printers are supported. The driver is open source, browser based, and works offline:{" "}
-                  <a
-                    href="https://niim.blue"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline inline-flex items-center gap-0.5"
-                  >
-                    niim.blue
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </p>
-                <p>
-                  If you need hardware, Niimbot printers are widely available for under $30. (e.g. on AliExpress or
-                  Amazon). If you are really paranoid you can destroy the printer after printing the slices.{" "}
+                  Print the slice PDFs on standard US Letter or A4 paper. For enhanced security, consider using a dumb printer with no networking capabilities.
                 </p>
               </div>
             </AccordionContent>
@@ -117,10 +88,9 @@ export function AboutTab() {
             <AccordionContent>
               <ul className="list-disc pl-5 space-y-1 pt-2">
                 <li>Generate slices.</li>
-                <li>Download the zip.</li>
-                <li>Copy each slice folder to a separate USB drive.</li>
-                <li>Print the slice using either the filter paper layout or the Niimbot label layout.</li>
-                <li>Hand the printed slice and its USB drive in a ziplock bag to the designated person.</li>
+                <li>Print each slice PDF.</li>
+                <li>Store each printed slice in a secure location (safe, safety deposit box, etc.).</li>
+                <li>Distribute the printed slices to the designated holders.</li>
               </ul>
             </AccordionContent>
           </AccordionItem>

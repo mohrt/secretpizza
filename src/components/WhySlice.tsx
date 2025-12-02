@@ -24,29 +24,25 @@ export default function WhySlice() {
         </div>
 
         <div className="info-section">
-          <h3>2. What you download</h3>
+          <h3>2. What you print</h3>
           <p>
-            After generating slices you receive a zip file. It contains one folder per slice. Each folder is self contained 
-            and can be handed to a distinct holder.
+            After generating slices, you can print each slice as a PDF. Each printed slice contains the hex share, QR code, and visual marker needed to recover the secret.
+          </p>
+          <p>
+            Each slice is self-contained and can be handed to a distinct holder. The slice includes:
           </p>
           <ul>
             <li>
-              <a href="https://github.com/mohrt/secretpizza" target="_blank" rel="noopener noreferrer">
-                secretpizza
-              </a>{' '}
-              source, FAQ, setup, and redeem guides.
+              Hex share data for manual entry
             </li>
             <li>
-              A PDF of the slice with hex share, QR share, and a visual marker. Formats: US Letter/A4 printer paper and a 
-              compact layout for Niimbot printers.
+              QR code for quick scanning during recovery
             </li>
-            <li>A PDF with unused addresses generated alongside the slice.</li>
             <li>
-              A readme outlining folder contents and steps to create a watch-only wallet in{' '}
-              <a href="https://simply.cash" target="_blank" rel="noopener noreferrer">
-                simply.cash
-              </a>{' '}
-              using the xpub tied to that slice's wallet.
+              Visual marker to identify the slice
+            </li>
+            <li>
+              Primary wallet address for verification
             </li>
           </ul>
         </div>
@@ -54,14 +50,7 @@ export default function WhySlice() {
         <div className="info-section">
           <h3>3. Printing options</h3>
           <p>
-            Niimbot label printers are supported. The driver is open source, browser based, and works offline:{' '}
-            <a href="https://niim.blue" target="_blank" rel="noopener noreferrer">
-              niim.blue
-            </a>
-          </p>
-          <p>
-            If you need hardware, Niimbot printers are widely available for under $30. (e.g. on AliExpress or Amazon). 
-            If you are really paranoid you can destroy the printer after printing the slices.
+            Print the slice PDFs on standard US Letter or A4 paper. For enhanced security, consider using a dumb printer with no networking capabilities.
           </p>
         </div>
 
@@ -69,10 +58,9 @@ export default function WhySlice() {
           <h3>4. How to prepare slice packages</h3>
           <ul>
             <li>Generate slices.</li>
-            <li>Download the zip.</li>
-            <li>Copy each slice folder to a separate USB drive.</li>
-            <li>Print the slice using either the filter paper layout or the Niimbot label layout.</li>
-            <li>Hand the printed slice and its USB drive in a ziplock bag to the designated person.</li>
+            <li>Print each slice PDF.</li>
+            <li>Store each printed slice in a secure location (safe, safety deposit box, etc.).</li>
+            <li>Distribute the printed slices to the designated holders.</li>
           </ul>
         </div>
 

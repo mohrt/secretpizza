@@ -28,11 +28,11 @@ export function PresetButtons({ onPresetClick, totalSlices, requiredSlices }: Pr
       description: "Standard team setup. Requires 3 out of 5 slices to recover.",
     },
     {
-      label: "3-of-22",
+      label: "7-of-22",
       total: "22",
-      required: "3",
-      shortDesc: "Tontine with accountant",
-      description: "Tontine setup. An accounting firm gets 7 slices (enough to recover alone).",
+      required: "7",
+      shortDesc: "Large organization",
+      description: "Large organization setup. Requires 7 out of 22 slices to recover.",
     },
   ]
 
