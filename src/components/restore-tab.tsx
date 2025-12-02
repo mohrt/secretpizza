@@ -7,6 +7,10 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { ClipboardPaste, Camera, Check, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { reconstructSecret } from "@/utils/shamir"
+import { validateMnemonic } from "@scure/bip39"
+import { wordlist } from "@scure/bip39/wordlists/english.js"
+import { Html5Qrcode } from "html5-qrcode"
 
 interface RestoreTabProps {
   onKeySliceFilesClick?: () => void
@@ -16,31 +20,45 @@ export function RestoreTab({ onKeySliceFilesClick }: RestoreTabProps) {
   const isMobile = useIsMobile()
   const tabsListRef = useRef<HTMLDivElement>(null)
 
-  const [innerTab, setInnerTab] = useState<string | undefined>(undefined)
-  const [scannedSlices, setScannedSlices] = useState(0)
+  const [innerTab, setInnerTab] = useState<string>(isMobile ? "scan" : "paste")
+  const [scannedSlices, setScannedSlices] = useState<string[]>([]) // Array of scanned share strings
   const [isScanning, setIsScanning] = useState(false)
+  const [isAttemptingRecovery, setIsAttemptingRecovery] = useState(false)
   const [recoveryData, setRecoveryData] = useState<{ privateKey: string; mnemonic: string } | null>(null)
   const [showRecoveredData, setShowRecoveredData] = useState(false)
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
+  
+  const scannerRef = useRef<Html5Qrcode | null>(null)
+  const scannerContainerRef = useRef<HTMLDivElement>(null)
 
   const [keySliceInputs, setKeySliceInputs] = useState<string[]>(["", ""])
   const [showPasteRecoveredData, setShowPasteRecoveredData] = useState(false)
 
   useEffect(() => {
-    if (innerTab === undefined) {
-      setInnerTab(isMobile ? "scan" : "paste")
-    }
-  }, [isMobile, innerTab])
-
-  useEffect(() => {
     fetch("/addresses.json")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`)
+        }
+        const contentType = res.headers.get("content-type")
+        if (!contentType || !contentType.includes("application/json")) {
+          throw new Error("Response is not JSON")
+        }
+        return res.json()
+      })
       .then((data) => {
         if (data.recoveryData) {
           setRecoveryData(data.recoveryData)
         }
       })
-      .catch(console.error)
+      .catch((error) => {
+        // Silently fail if addresses.json doesn't exist - it's optional
+        if (error.message.includes("404") || error.message.includes("not JSON")) {
+          // File doesn't exist or is not JSON, which is fine
+          return
+        }
+        console.error("Error loading recovery data:", error)
+      })
   }, [])
 
   useEffect(() => {
@@ -67,33 +85,258 @@ export function RestoreTab({ onKeySliceFilesClick }: RestoreTabProps) {
   }, [innerTab])
 
 
-  const handleScanClick = () => {
-    setIsScanning(true)
-
-    // Show pizza spinner for 1 second, then increment scanned slices
-    setTimeout(() => {
-      setIsScanning(false)
-      const newCount = scannedSlices + 1
-      setScannedSlices(newCount)
-
-      if (newCount >= 3) {
-        // All slices scanned, show recovered data
-        setShowRecoveredData(true)
-        toast.success("All key slices scanned! Secret recovered.")
-      } else {
-        toast.success(`Key slice ${newCount} scanned successfully!`)
+  const handleScanClick = async () => {
+    // Stop any existing scanner first
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop()
+        scannerRef.current = null
+      } catch (error) {
+        // Ignore stop errors
+        scannerRef.current = null
       }
-    }, 1000)
+    }
+
+    // Show the scanner container
+    setIsScanning(true)
+    
+    // Wait for React to render the container
+    await new Promise(resolve => setTimeout(resolve, 200))
+
+    // Check if container exists
+    const container = document.getElementById("qr-reader-scan-tab")
+    if (!container) {
+      console.error("Scanner container not found")
+      setIsScanning(false)
+      toast.error("Scanner container not ready. Please try again.")
+      return
+    }
+
+    try {
+      // Create new scanner instance
+      scannerRef.current = new Html5Qrcode("qr-reader-scan-tab")
+      const scanner = scannerRef.current
+
+      // Try to get available cameras first
+      let cameraId: string | { facingMode: string } = { facingMode: "environment" }
+      
+      try {
+        const devices = await Html5Qrcode.getCameras()
+        console.log("Available cameras:", devices)
+
+        // If we have camera devices, try to find a back camera
+        if (devices && devices.length > 0) {
+          const backCamera = devices.find(device => 
+            device.label.toLowerCase().includes("back") || 
+            device.label.toLowerCase().includes("rear")
+          )
+          if (backCamera) {
+            cameraId = backCamera.id
+          } else {
+            // Use first available camera
+            cameraId = devices[0].id
+          }
+        } else {
+          // No cameras found, use default config
+          console.warn("No cameras found, using default config")
+        }
+      } catch (cameraError) {
+        console.warn("Could not enumerate cameras, using default config:", cameraError)
+        // Use default config
+      }
+
+      console.log("Using camera:", cameraId)
+
+      // Start scanning
+      await scanner.start(
+        cameraId,
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0,
+        },
+        (decodedText) => {
+          // QR code detected
+          handleQRCodeScanned(decodedText)
+        },
+        (_errorMessage) => {
+          // Ignore scanning errors (they're frequent during scanning)
+        }
+      )
+    } catch (error) {
+      console.error("Error starting scanner:", error)
+      setIsScanning(false)
+      scannerRef.current = null
+      const errorMessage = error instanceof Error ? error.message : "Unknown error"
+      if (errorMessage.includes("Permission") || errorMessage.includes("permission")) {
+        toast.error("Camera permission denied. Please allow camera access and try again.")
+      } else if (errorMessage.includes("NotFoundError") || errorMessage.includes("not found")) {
+        toast.error("No camera found. Please connect a camera and try again.")
+      } else {
+        toast.error(`Failed to start camera: ${errorMessage}`)
+      }
+    }
   }
 
-  const handleResetScan = () => {
-    setScannedSlices(0)
-    setShowRecoveredData(false)
+  const handleQRCodeScanned = async (decodedText: string) => {
+    // Clean the scanned text (remove whitespace, ensure hex-only)
+    const cleanedShare = decodedText.replace(/\s+/g, '').replace(/[^0-9a-fA-F]/g, '')
+    
+    if (cleanedShare.length === 0) {
+      toast.error("Invalid QR code: No valid hex data found")
+      return
+    }
+
+    // Check if this share is already scanned
+    if (scannedSlices.includes(cleanedShare)) {
+      toast.info("This slice has already been scanned")
+      return
+    }
+
+    // Stop scanning temporarily
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop()
+      } catch (error) {
+        // Ignore stop errors
+      }
+    }
+    setIsScanning(false)
+
+    // Add to scanned slices
+    const newScannedSlices = [...scannedSlices, cleanedShare]
+    setScannedSlices(newScannedSlices)
+
+    toast.success(`Key slice ${newScannedSlices.length} scanned successfully!`)
+
+    // If we have at least 2 slices, try to recover
+    // Note: We don't know the threshold, so we try after each scan once we have 2+
+    if (newScannedSlices.length >= 2) {
+      setIsAttemptingRecovery(true)
+      try {
+        await recoverFromScannedSlices(newScannedSlices)
+      } catch (error) {
+        // Error already handled in recoverFromScannedSlices
+      } finally {
+        setIsAttemptingRecovery(false)
+      }
+    }
   }
+
+  const recoverFromScannedSlices = async (shares: string[]) => {
+    if (shares.length < 2) return
+
+    // Validate that all shares have the same length
+    const shareLengths = shares.map(share => share.length)
+    const firstLength = shareLengths[0]
+    const allSameLength = shareLengths.every(length => length === firstLength)
+
+    if (!allSameLength) {
+      const lengthCounts = shareLengths.reduce((acc, len) => {
+        acc[len] = (acc[len] || 0) + 1
+        return acc
+      }, {} as Record<number, number>)
+      const lengthDetails = Object.entries(lengthCounts)
+        .map(([len, count]) => `${count} slice${count > 1 ? 's' : ''} with ${len} characters`)
+        .join(', ')
+      toast.error(`All slices must have the same length. Found: ${lengthDetails}. Please scan all slices again.`)
+      return
+    }
+
+    // Validate that hex length is even
+    if (firstLength % 2 !== 0) {
+      toast.error(`Invalid slice length: ${firstLength} characters. Hex strings must have an even number of characters.`)
+      return
+    }
+
+    try {
+      // Reconstruct the secret from the shares
+      const recoveredSecret = await reconstructSecret(shares)
+
+      // Normalize the recovered secret
+      const cleanedSecret = recoveredSecret
+        .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
+        .trim()
+        .replace(/\s+/g, ' ')
+
+      // Check if it's a valid BIP39 mnemonic phrase
+      const isMnemonicPhrase = validateMnemonic(cleanedSecret, wordlist)
+
+      // Set the recovery data
+      setRecoveryData({
+        privateKey: isMnemonicPhrase ? "" : cleanedSecret,
+        mnemonic: isMnemonicPhrase ? cleanedSecret : ""
+      })
+
+      setShowRecoveredData(true)
+      toast.success("Secret successfully recovered!")
+    } catch (error) {
+      console.error("Error recovering secret:", error)
+      let errorMessage = "Unknown error"
+      
+      if (error instanceof Error) {
+        errorMessage = error.message
+        if (errorMessage.includes("same byte length")) {
+          errorMessage = "All slices must have the same length. Please scan all slices again."
+        } else if (errorMessage.includes("at least 2 shares")) {
+          errorMessage = "You need at least 2 slices to recover the secret."
+        } else if (errorMessage.includes("invalid") || errorMessage.includes("Invalid")) {
+          errorMessage = "Invalid slice data. Please check that your slices are correct and complete."
+        }
+      }
+      
+      // If it's a validation error (length mismatch, etc), show as error
+      // Otherwise, it might just be that we don't have enough slices yet, so show as info
+      if (errorMessage.includes("same byte length") || errorMessage.includes("Invalid")) {
+        toast.error(`Failed to recover secret: ${errorMessage}. Please check your slices.`)
+      } else {
+        // Likely just need more slices - this is normal, so show as info
+        toast.info(`Not enough slices yet. Keep scanning.`)
+      }
+    }
+  }
+
+  const handleResetScan = async () => {
+    // Stop scanner if running
+    if (scannerRef.current && isScanning) {
+      try {
+        await scannerRef.current.stop()
+      } catch (error) {
+        // Ignore stop errors
+      }
+    }
+    setIsScanning(false)
+    setScannedSlices([])
+    setShowRecoveredData(false)
+    setRecoveryData(null)
+  }
+
+  // Cleanup scanner when component unmounts or tab changes
+  useEffect(() => {
+    return () => {
+      if (scannerRef.current) {
+        scannerRef.current.stop().catch(() => {
+          // Ignore cleanup errors
+        })
+      }
+    }
+  }, [])
+
+  // Stop scanner when switching away from scan tab
+  useEffect(() => {
+    if (innerTab !== "scan" && scannerRef.current && isScanning) {
+      scannerRef.current.stop().catch(() => {
+        // Ignore stop errors
+      })
+      setIsScanning(false)
+    }
+  }, [innerTab, isScanning])
 
   const handleKeySliceChange = (index: number, value: string) => {
+    // Only allow hex characters (0-9, a-f, A-F) - remove all other characters
+    const hexOnly = value.replace(/[^0-9a-fA-F]/g, '')
     const newInputs = [...keySliceInputs]
-    newInputs[index] = value
+    newInputs[index] = hexOnly
     setKeySliceInputs(newInputs)
   }
 
@@ -111,10 +354,83 @@ export function RestoreTab({ onKeySliceFilesClick }: RestoreTabProps) {
   const filledInputsCount = keySliceInputs.filter((input) => input.trim().length > 0).length
   const canRestore = filledInputsCount >= 2
 
-  const handlePasteRestore = () => {
+  const handlePasteRestore = async () => {
     if (!canRestore) return
-    setShowPasteRecoveredData(true)
-    toast.success("Secret successfully recovered!")
+
+    // Get the filled slice inputs (already sanitized to hex-only by handleKeySliceChange)
+    const filledShares = keySliceInputs
+      .filter(input => input.length > 0)
+
+    if (filledShares.length < 2) {
+      toast.error("Please provide at least 2 key slices")
+      return
+    }
+
+    // Validate that all shares have the same length
+    const shareLengths = filledShares.map(share => share.length)
+    const firstLength = shareLengths[0]
+    const allSameLength = shareLengths.every(length => length === firstLength)
+
+    if (!allSameLength) {
+      const lengthCounts = shareLengths.reduce((acc, len) => {
+        acc[len] = (acc[len] || 0) + 1
+        return acc
+      }, {} as Record<number, number>)
+      const lengthDetails = Object.entries(lengthCounts)
+        .map(([len, count]) => `${count} slice${count > 1 ? 's' : ''} with ${len} characters`)
+        .join(', ')
+      toast.error(`All slices must have the same length. Found: ${lengthDetails}. Please check your slices.`)
+      return
+    }
+
+    // Validate that hex length is even (required for byte conversion)
+    if (firstLength % 2 !== 0) {
+      toast.error(`Invalid slice length: ${firstLength} characters. Hex strings must have an even number of characters.`)
+      return
+    }
+
+    try {
+      // Reconstruct the secret from the shares
+      const recoveredSecret = await reconstructSecret(filledShares)
+
+      // Normalize the recovered secret (trim and normalize whitespace)
+      // First remove all non-printable characters and normalize whitespace
+      const cleanedSecret = recoveredSecret
+        .replace(/[\x00-\x1F\x7F-\x9F]/g, '') // Remove control characters
+        .trim()
+        .replace(/\s+/g, ' ') // Normalize whitespace to single spaces
+
+      // Check if it's a valid BIP39 mnemonic phrase
+      const isMnemonicPhrase = validateMnemonic(cleanedSecret, wordlist)
+
+      // Set the recovery data
+      setRecoveryData({
+        privateKey: isMnemonicPhrase ? "" : cleanedSecret,
+        mnemonic: isMnemonicPhrase ? cleanedSecret : ""
+      })
+
+      setShowPasteRecoveredData(true)
+      toast.success("Secret successfully recovered!")
+    } catch (error) {
+      console.error("Error recovering secret:", error)
+      let errorMessage = "Unknown error"
+      
+      if (error instanceof Error) {
+        errorMessage = error.message
+        // Make error messages more user-friendly
+        if (errorMessage.includes("same byte length")) {
+          errorMessage = "All slices must have the same length. Please check that you've entered complete slices."
+        } else if (errorMessage.includes("at least 2 shares")) {
+          errorMessage = "You need at least 2 slices to recover the secret."
+        } else if (errorMessage.includes("invalid") || errorMessage.includes("Invalid")) {
+          errorMessage = "Invalid slice data. Please check that your slices are correct and complete."
+        }
+      }
+      
+      toast.error(`Failed to recover secret: ${errorMessage}`)
+      setRecoveryData(null)
+      setShowPasteRecoveredData(false)
+    }
   }
 
   const handleResetPaste = () => {
@@ -179,22 +495,30 @@ export function RestoreTab({ onKeySliceFilesClick }: RestoreTabProps) {
               {!showRecoveredData ? (
                 <>
                   <div className="text-sm text-muted-foreground mb-4">
-                    Scan each key slice QR code one at a time. You need to scan at least 3 slices to recover your
-                    secret.
+                    Scan each key slice QR code one at a time. Continue until the minimum required slices are scanned.
                   </div>
+                  
+                  {isAttemptingRecovery && (
+                    <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
+                      <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-700 dark:border-blue-300 border-t-transparent"></div>
+                        <span className="text-sm font-medium">Attempting recovery with {scannedSlices.length} slice{scannedSlices.length > 1 ? 's' : ''}...</span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Progress indicators */}
                   <div className="flex items-center justify-center gap-4 mb-6">
-                    {[1, 2, 3].map((step) => (
+                    {[1, 2, 3, 4, 5].map((step) => (
                       <div
                         key={step}
                         className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
-                          scannedSlices >= step
+                          scannedSlices.length >= step
                             ? "bg-primary border-primary text-primary-foreground"
                             : "border-muted-foreground text-muted-foreground"
                         }`}
                       >
-                        {scannedSlices >= step ? <Check className="w-5 h-5" /> : step}
+                        {scannedSlices.length >= step ? <Check className="w-5 h-5" /> : step}
                       </div>
                     ))}
                   </div>
@@ -202,22 +526,54 @@ export function RestoreTab({ onKeySliceFilesClick }: RestoreTabProps) {
                   {/* Scanning area */}
                   <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg bg-muted/30">
                     {isScanning ? (
-                      <div className="flex flex-col items-center gap-4">
-                        <img src="/images/pizzaloader.webp" alt="Scanning..." width={80} height={80} />
-                        <p className="text-sm text-muted-foreground">Scanning key slice {scannedSlices + 1}...</p>
+                      <div className="flex flex-col items-center gap-4 w-full">
+                        <div 
+                          id="qr-reader-scan-tab" 
+                          ref={scannerContainerRef}
+                          className="w-full max-w-md"
+                          style={{ minHeight: '300px' }}
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          Scanning key slice {scannedSlices.length + 1}... Point camera at QR code
+                        </p>
+                        <Button 
+                          onClick={async () => {
+                            if (scannerRef.current) {
+                              try {
+                                await scannerRef.current.stop()
+                              } catch (error) {
+                                // Ignore stop errors
+                              }
+                            }
+                            setIsScanning(false)
+                          }} 
+                          variant="outline"
+                          className="bg-transparent"
+                        >
+                          Stop Scanning
+                        </Button>
                       </div>
                     ) : (
                       <div className="flex flex-col items-center gap-4">
                         <Camera className="w-16 h-16 text-muted-foreground" />
                         <p className="text-sm text-muted-foreground text-center">
-                          {scannedSlices === 0
+                          {scannedSlices.length === 0
                             ? "Click the button below to scan your first key slice QR code"
-                            : `${scannedSlices} of 3 slices scanned. Click to scan the next QR code.`}
+                            : `${scannedSlices.length} slice${scannedSlices.length > 1 ? 's' : ''} scanned. Continue scanning until recovery succeeds.`}
                         </p>
                         <Button onClick={handleScanClick} className="bg-black hover:bg-black/90 text-white">
                           <Camera className="w-4 h-4 mr-2" />
-                          Scan key slice {scannedSlices + 1}
+                          Scan key slice {scannedSlices.length + 1}
                         </Button>
+                        {scannedSlices.length > 0 && (
+                          <Button 
+                            onClick={handleResetScan} 
+                            variant="outline"
+                            className="bg-transparent"
+                          >
+                            Reset
+                          </Button>
+                        )}
                       </div>
                     )}
                   </div>

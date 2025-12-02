@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react"
 import { MainInterface, type MainInterfaceHandle } from './components/main-interface'
 import { Toaster, toast } from "sonner"
 import SliceTemplate from './components/SliceTemplate'
+import { generateQRCodeDataURL } from "@/utils/qrcode"
 import './App.css'
 
 function App() {
@@ -22,13 +23,140 @@ function App() {
 
   // Trigger print after the print-only section has been rendered
   useEffect(() => {
-    if (shouldPrint && printSlices.length > 0) {
+    if (!shouldPrint || printSlices.length === 0) return
+
+    const generatePrintContent = async () => {
+      // Generate QR codes for each slice
+      const slicesWithQR = await Promise.all(
+        printSlices.map(async (slice) => {
+          const shareQR = await generateQRCodeDataURL(slice.share, { width: 400, errorCorrectionLevel: 'H' })
+          const addressQR = slice.walletAddress 
+            ? await generateQRCodeDataURL(slice.walletAddress, { width: 400, errorCorrectionLevel: 'H' })
+            : null
+          return {
+            ...slice,
+            shareQR,
+            addressQR
+          }
+        })
+      )
+
       // Create a new window with just the print content
       const printWindow = window.open('', '_blank', 'width=800,height=600')
 
-      if (printWindow) {
-        // Generate the HTML for printing
-        const printHTML = `
+      if (!printWindow) {
+        toast.error("Failed to open print window")
+        setPrintSlices([])
+        setShouldPrint(false)
+        return
+      }
+
+      // Visual marker icons for each theme (same as SliceTemplate)
+      const visualMarkerIcons: Record<string, string[]> = {
+        pizza: ['🍕', '🍄', '🧅', '🫒', '🌶️', '🥓', '🧀', '🍅', '🌿', '🥬', '🫑', '🥒', '🌽', '🥕', '🥔', '🥑', '🥩', '🍖', '🦐', '🦑', '🐟', '🐠'],
+        cosmos: ['🪐', '⭐', '🌟', '✨', '💫', '🌙', '☀️', '🌍', '🌎', '🌏', '🔭', '🛸', '👽', '🚀', '🌌', '🌠', '☄️', '🌑', '🌒', '🌓', '🌔', '🌕'],
+        primates: ['🦍', '🦧', '🐵', '🙈', '🙉', '🙊', '🐒', '🦝', '🦁', '🐯', '🐅', '🐆', '🐴', '🦄', '🦓', '🦌', '🦬', '🐂', '🐃', '🐄', '🐎', '🐖'],
+        vehicles: ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🏍️', '🛵', '🚲', '🛴', '🛹', '🛼', '🚁', '✈️'],
+        furniture: ['🪑', '🛋️', '🛏️', '🪣', '🪤', '🪆', '🪡', '🪢', '🪣', '🪝', '🪟', '🪞', '🪟', '🪠', '🪡', '🪢', '🪣', '🪝', '🪟', '🪞', '🪟', '🪠'],
+        instruments: ['🎸', '🎹', '🥁', '🎺', '🎷', '🎤', '🎧', '🎵', '🎶', '🎼', '🎻', '🪘', '🪗', '🪕', '🎹', '🥁', '🎺', '🎷', '🎤', '🎧', '🎵', '🎶'],
+        trees: ['🌳', '🌲', '🌴', '🌵', '🌱', '🌿', '☘️', '🍀', '🍃', '🍂', '🍁', '🌾', '🌺', '🌻', '🌷', '🌹', '🥀', '🌼', '🌸', '🌍', '🌎', '🌏'],
+        colors: ['🎨', '🔴', '🟠', '🟡', '🟢', '🔵', '🟣', '⚫', '⚪', '🟤', '🟥', '🟧', '🟨', '🟩', '🟦', '🟪', '⬛', '⬜', '🟫', '🔶', '🔷', '🔸'],
+        shapes: ['🔷', '🔶', '🔸', '🔹', '🔺', '🔻', '💠', '🔳', '🔲', '⚪', '⚫', '🟠', '🟡', '🟢', '🔵', '🟣', '🟤', '🟥', '🟧', '🟨', '🟩', '🟦'],
+        tools: ['🔨', '🪓', '⛏️', '🪚', '🔧', '🪛', '🔩', '⚙️', '🪤', '🧰', '🧲', '🪜', '⚒️', '🛠️', '🗡️', '⚔️', '🔪', '🗡️', '⚔️', '🪓', '⛏️', '🪚'],
+      }
+
+      function getVisualMarkerIcon(theme: string, sliceNumber: number): string {
+        const icons = visualMarkerIcons[theme] || visualMarkerIcons.pizza
+        return icons[(sliceNumber - 1) % icons.length]
+      }
+
+      // Generate the HTML for printing
+      // Build QR code HTML for each slice to avoid nested template literals
+      const slicesHTML = slicesWithQR.map(slice => {
+          const addressQRHtml = slice.addressQR 
+            ? `<img src="${slice.addressQR}" alt="Wallet address QR code" style="width: 100%; height: 100%; object-fit: contain;" />`
+            : '<div style="font-size: 8pt; text-align: center; color: #666; padding: 0.5in;">Address not available</div>'
+          
+          const generatedDate = new Date(slice.generatedOn || new Date()).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+
+          // Get the correct visual marker icon for this slice
+          const visualMarker = slice.visualMarker || 'pizza'
+          const markerIcon = getVisualMarkerIcon(visualMarker, slice.index)
+          
+          return `
+                <div class="slice-template">
+                  <div class="slice-header">
+                    <div class="slice-header-left">
+                      <div class="slice-title">key slice ${slice.index} of ${slice.totalSlices || printSlices.length}</div>
+                      <div class="key-icon">${markerIcon}</div>
+                    </div>
+                    <div class="slice-header-center">
+                      <div class="decorative-circle">
+                        <div class="logo-content">
+                          <img src="/images/shamir-logo.png" alt="Secret Pizza" class="logo-image" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="slice-body">
+                    <div class="slice-column-left">
+                      <div class="field-group">
+                        <label class="field-label">wallet label</label>
+                        <div class="field-value">${slice.walletLabel || 'coldpizza'}</div>
+                      </div>
+                      <div class="field-group">
+                        <label class="field-label">instructions</label>
+                        <div class="field-value instructions-field">
+                          Keep this key slice secure. You will need at least ${slice.threshold || Math.ceil(printSlices.length / 2)} of ${slice.totalSlices || printSlices.length} slices to restore the wallet.
+                        </div>
+                      </div>
+                    </div>
+                    <div class="slice-column-right">
+                      <div class="data-section">
+                        <label class="data-label">key slice data</label>
+                        <div class="data-content">
+                          <div class="data-text">
+                            <pre>${slice.share}</pre>
+                          </div>
+                          <div class="data-qr">
+                            <img src="${slice.shareQR}" alt="Key slice data QR code" style="width: 100%; height: 100%; object-fit: contain;" />
+                          </div>
+                        </div>
+                      </div>
+                      <div class="data-section">
+                        <label class="data-label">primary address</label>
+                        <div class="data-content">
+                          <div class="data-text">
+                            <pre>${slice.walletAddress || "N/A - Address not available"}</pre>
+                          </div>
+                          <div class="data-qr">
+                            ${addressQRHtml}
+                          </div>
+                        </div>
+                      </div>
+                      <div class="field-group">
+                        <label class="field-label">generated on</label>
+                        <div class="field-value">${generatedDate}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="slice-footer">
+                    <div class="footer-border"></div>
+                    <div class="footer-notice">
+                      keep this key slice secure, whoever gave it to you will ask for it in the future. read more on secretpizza.org
+                    </div>
+                  </div>
+                </div>
+              `
+        }).join('')
+
+      const printHTML = `
           <!DOCTYPE html>
           <html>
             <head>
@@ -233,103 +361,35 @@ function App() {
               </style>
             </head>
             <body>
-              ${printSlices.map(slice => `
-                <div class="slice-template">
-                  <div class="slice-header">
-                    <div class="slice-header-left">
-                      <div class="slice-title">key slice ${slice.index} of ${slice.totalSlices || printSlices.length}</div>
-                      <div class="key-icon">🍕</div>
-                    </div>
-                    <div class="slice-header-center">
-                      <div class="decorative-circle">
-                        <div class="logo-content">
-                          <img src="/images/shamir-logo.png" alt="Secret Pizza" class="logo-image" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="slice-body">
-                    <div class="slice-column-left">
-                      <div class="field-group">
-                        <label class="field-label">wallet label</label>
-                        <div class="field-value">${slice.walletLabel || 'coldpizza'}</div>
-                      </div>
-                      <div class="field-group">
-                        <label class="field-label">instructions</label>
-                        <div class="field-value instructions-field">
-                          Keep this key slice secure. You will need at least ${slice.threshold || Math.ceil(printSlices.length / 2)} of ${slice.totalSlices || printSlices.length} slices to restore the wallet.
-                        </div>
-                      </div>
-                    </div>
-                    <div class="slice-column-right">
-                      <div class="data-section">
-                        <label class="data-label">key slice data</label>
-                        <div class="data-content">
-                          <div class="data-text">
-                            <pre>${slice.share}</pre>
-                          </div>
-                          <div class="data-qr">
-                            <div style="font-size: 8pt; text-align: center; color: #666; padding: 0.5in;">
-                              QR Code would be here
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="data-section">
-                        <label class="data-label">primary address</label>
-                        <div class="data-content">
-                          <div class="data-text">
-                            <pre>${slice.walletAddress || "N/A - Address not available"}</pre>
-                          </div>
-                          <div class="data-qr">
-                            <div style="font-size: 8pt; text-align: center; color: #666; padding: 0.5in;">
-                              QR Code would be here
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="field-group">
-                        <label class="field-label">generated on</label>
-                        <div class="field-value">${new Date(slice.generatedOn || new Date()).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="slice-footer">
-                    <div class="footer-border"></div>
-                    <div class="footer-notice">
-                      keep this key slice secure, whoever gave it to you will ask for it in the future. read more on secretpizza.org
-                    </div>
-                  </div>
-                </div>
-              `).join('')}
+              ${slicesHTML}
             </body>
           </html>
         `
 
-        printWindow.document.write(printHTML)
-        printWindow.document.close()
+      printWindow.document.write(printHTML)
+      printWindow.document.close()
 
-        // Wait for content to load, then print
-        setTimeout(() => {
-          printWindow.print()
-          printWindow.close()
-        }, 200)
+      // Wait for content to load, then print
+      setTimeout(() => {
+        printWindow.print()
+        printWindow.close()
+      }, 200)
 
-        // Clean up state
-        setPrintSlices([])
-        setShouldPrint(false)
+      // Clean up state
+      setPrintSlices([])
+      setShouldPrint(false)
 
-        toast.info("Print Complete Kit", {
-          description: "Choose 'Save as PDF' to download all slices",
-        })
-      }
+      toast.info("Print Complete Kit", {
+        description: "Choose 'Save as PDF' to download all slices",
+      })
     }
+
+    generatePrintContent().catch((error) => {
+      console.error("Error generating print content:", error)
+      toast.error("Failed to generate print content")
+      setPrintSlices([])
+      setShouldPrint(false)
+    })
   }, [shouldPrint, printSlices])
 
   return (

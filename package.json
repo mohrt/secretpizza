@@ -26,6 +26,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "crypto-browserify": "^3.12.1",
+    "html5-qrcode": "^2.3.8",
     "lucide-react": "^0.555.0",
     "qrcode": "^1.5.3",
     "react": "^18.2.0",
