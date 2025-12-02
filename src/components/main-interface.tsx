@@ -6,8 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Progress } from "@/components/ui/progress"
-import { Info, Pizza, Dice3, Key, Printer } from "lucide-react"
+import { Info, Pizza, Key, Printer } from "lucide-react"
 import { entropyToMnemonic } from "@scure/bip39"
 import { wordlist } from "@scure/bip39/wordlists/english.js"
 import { PrivateKey } from "@bsv/sdk"
@@ -15,11 +14,10 @@ import { diceRollsToMnemonic, diceRollsToPrivateKey } from "@/utils/dice2mnemoni
 import { splitSecret } from "@/utils/shamir"
 import { generateQRCodeDataURL } from "@/utils/qrcode"
 import { deriveAddressesFromMnemonic } from "@/utils/wallet"
-import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useIsMobile } from "@/hooks/use-mobile"
 
-import { DiceRollSection, type DieType } from "@/components/dice-roll-section"
+import { type DieType } from "@/components/dice-roll-section"
 import { PizzaChart } from "@/components/pizza-chart"
 import { PresetButtons } from "@/components/preset-buttons"
 import { SliceConfigSliders } from "@/components/slice-config-sliders"
@@ -31,6 +29,7 @@ import { AboutTab } from "@/components/about-tab"
 import { RestoreTab } from "@/components/restore-tab"
 import DisplayCards from "@/components/ui/display-cards"
 import { EntropyCollector } from "@/components/entropy-collector"
+import { GenerateKeyDialog } from "@/components/generate-key-dialog"
 
 export interface MainInterfaceHandle {
   setActiveTab: (tab: string) => void
@@ -56,7 +55,7 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
     const [requiredSlices, setRequiredSlices] = useState("2")
     const [visualMarker, setVisualMarker] = useState("pizza")
     const [filenamePrefix, setFilenamePrefix] = useState("coldpizza_")
-    const [showRollArea, setShowRollArea] = useState(false)
+    const [showGenerateDialog, setShowGenerateDialog] = useState(false)
     const [isGenerating, setIsGenerating] = useState(false)
     const [showResults, setShowResults] = useState(false)
     const [addressCount, setAddressCount] = useState("5")
@@ -76,17 +75,16 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
     const [selectedDie, setSelectedDie] = useState<DieType | null>(null)
     const [showEntropyCollector, setShowEntropyCollector] = useState(false)
     const [pendingWordCount, setPendingWordCount] = useState<12 | 24 | null>(null)
-    const [cachedEntropy, setCachedEntropy] = useState<Uint8Array | null>(null)
-
-    const ENTROPY_TARGET_LENGTH = 50
+    const [_cachedEntropy, setCachedEntropy] = useState<Uint8Array | null>(null)
 
     // Imperative handle for parent control
     useImperativeHandle(ref, () => ({
       setActiveTab: (tab) => onTabChange?.(tab),
-      setShowRollArea: (show) => setShowRollArea(show),
+      setShowRollArea: (show) => setShowGenerateDialog(show), // Keep for backward compatibility
       enableDice: (diceToEnable) => {
         if (diceToEnable.length > 0) {
           setSelectedDie(diceToEnable[0])
+          setShowGenerateDialog(true) // Open dialog when dice is enabled
         }
       },
       setPreset: (total, required) => {
@@ -177,36 +175,6 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
         const errorMessage = error instanceof Error ? error.message : "Failed to convert dice rolls"
         toast.error(errorMessage)
       }
-    }
-
-    const generatePhrase = (words: 12 | 24) => {
-      // Check if we already have cached entropy
-      if (cachedEntropy && cachedEntropy.length >= 32) {
-        // Use cached entropy as additional seed for crypto PRNG
-        // Generate fresh random bytes each time
-        const requiredBytes = words === 12 ? 16 : 32
-        
-        // Generate fresh crypto random bytes
-        const freshEntropy = new Uint8Array(requiredBytes)
-        crypto.getRandomValues(freshEntropy)
-        
-        // Mix cached entropy with fresh crypto entropy (XOR)
-        const finalEntropy = new Uint8Array(requiredBytes)
-        for (let i = 0; i < requiredBytes; i++) {
-          finalEntropy[i] = freshEntropy[i] ^ cachedEntropy[i % cachedEntropy.length]
-        }
-        
-        const mnemonic = entropyToMnemonic(finalEntropy, wordlist)
-        setSecret(mnemonic)
-        setIsMnemonic(true)
-        setShowAddresses(false) // Don't show addresses by default
-        toast.success(`Generated ${words}-word mnemonic phrase`)
-        return
-      }
-      
-      // No cached entropy, need to collect it
-      setPendingWordCount(words)
-      setShowEntropyCollector(true)
     }
 
     const handleEntropyCollected = (entropy: Uint8Array) => {
@@ -489,39 +457,14 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
                 <div className="space-y-2">
                   <div className="flex items-center md:items-start flex-col md:flex-row my-0 py-0 items-center gap-4 justify-between pb-5">
                     <span className="mt-1 md:mt-0">Choose how to derive your key</span>
-                    <div className="flex flex-col md:flex-row items-end md:items-center gap-1 md:gap-2">
-                      <div className="flex gap-2 items-center justify-between">
-                        <Button
-                          variant="link"
-                          className="h-auto p-0 text-xs text-primary"
-                          onClick={() => generatePhrase(12)}
-                        >
-                          12-words
-                        </Button>
-                        <span className="text-xs text-muted-foreground">•</span>
-                        <Button
-                          variant="link"
-                          className="h-auto p-0 text-xs text-primary"
-                          onClick={() => generatePhrase(24)}
-                        >
-                          24-words
-                        </Button>
-                        <span className="hidden md:inline text-xs text-muted-foreground">•</span>
-                        <Button
-                          variant={showRollArea ? "secondary" : "ghost"}
-                          className={cn(
-                            "h-6 px-2 text-xs gap-1 transition-colors",
-                            showRollArea
-                              ? "bg-primary/10 text-primary hover:bg-primary/20"
-                              : "text-primary hover:text-primary/80 hover:bg-transparent p-0 h-auto font-normal",
-                          )}
-                          onClick={() => setShowRollArea(!showRollArea)}
-                        >
-                          {showRollArea ? "Hide Dice" : "Roll key"}
-                          <Dice3 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
+                    <Button
+                      variant="outline"
+                      className="h-auto px-3 py-1.5 text-sm gap-2"
+                      onClick={() => setShowGenerateDialog(true)}
+                    >
+                      <Key className="h-4 w-4" />
+                      Generate
+                    </Button>
                   </div>
 
                   <div className="space-y-2">
@@ -556,27 +499,7 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
                     />
                     
 
-                    {showRollArea && (
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>Entropy progress</span>
-                          <span>{Math.max(0, ENTROPY_TARGET_LENGTH - secret.length)} more characters required</span>
-                        </div>
-                        <Progress
-                          value={Math.min(100, (secret.length / ENTROPY_TARGET_LENGTH) * 100)}
-                          className="h-2"
-                        />
-                      </div>
-                    )}
                   </div>
-
-                  {showRollArea && (
-                    <DiceRollSection
-                      selectedDie={selectedDie}
-                      onSelectDie={setSelectedDie}
-                      onConvertToSeed={convertDiceRollsToSecret}
-                    />
-                  )}
 
                   <PizzaChart
                     totalSlices={Number.parseInt(totalSlices)}
@@ -934,7 +857,20 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
           onComplete={handleEntropyCollected}
           targetBits={pendingWordCount === 12 ? 128 : 256}
         />
-
+        
+        <GenerateKeyDialog
+          open={showGenerateDialog}
+          onClose={() => setShowGenerateDialog(false)}
+          onSecretGenerated={(secret, isMnemonic) => {
+            setSecret(secret)
+            setIsMnemonic(isMnemonic)
+            setShowAddresses(false)
+            setShowGenerateDialog(false)
+          }}
+          onDiceConvert={convertDiceRollsToSecret}
+          selectedDie={selectedDie}
+          onSelectDie={setSelectedDie}
+        />
 
       </TooltipProvider>
     )
