@@ -46,29 +46,7 @@ A web application for generating BSV cold storage wallets, splitting them into S
 
 ## Deployment
 
-### Deploy to Dev Environment
-
-```bash
-./scripts/deploy-dev.sh
-```
-
-This will:
-- Build the project
-- Upload to `dev.secretpizza.org` S3 bucket
-- Invalidate CloudFront cache
-
-### Deploy to Production
-
-```bash
-./scripts/deploy-prod.sh
-```
-
-This will:
-- Build the project
-- Upload to `secretpizza.org` S3 bucket
-- Invalidate CloudFront cache
-
-**Note**: Make sure your AWS profile `terraform-admin` is configured before deploying.
+Deployment instructions are available in the infrastructure documentation.
 
 ## Infrastructure
 
