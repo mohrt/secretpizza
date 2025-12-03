@@ -29,9 +29,9 @@ function App() {
       // Generate QR codes for each slice
       const slicesWithQR = await Promise.all(
         printSlices.map(async (slice) => {
-          const shareQR = await generateQRCodeDataURL(slice.share, { width: 400, errorCorrectionLevel: 'H' })
+          const shareQR = await generateQRCodeDataURL(slice.share, { width: 600, errorCorrectionLevel: 'H' })
           const addressQR = slice.walletAddress 
-            ? await generateQRCodeDataURL(slice.walletAddress, { width: 400, errorCorrectionLevel: 'H' })
+            ? await generateQRCodeDataURL(slice.walletAddress, { width: 600, errorCorrectionLevel: 'H' })
             : null
           return {
             ...slice,

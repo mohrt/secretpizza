@@ -139,7 +139,7 @@ function SliceQRCode({ data }: { data: string }) {
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
-    generateQRCodeDataURL(data, { width: 200, errorCorrectionLevel: 'H' })
+    generateQRCodeDataURL(data, { width: 300, errorCorrectionLevel: 'H' })
       .then(setQrCode)
       .catch(console.error)
       .finally(() => setLoading(false))

@@ -147,13 +147,19 @@ export function RestoreTab({ onKeySliceFilesClick }: RestoreTabProps) {
 
       console.log("Using camera:", cameraId)
 
-      // Start scanning
+      // Start scanning with larger qrbox and higher camera resolution for high-density QR codes
+      // html5-qrcode primarily focuses on QR codes by default
       await scanner.start(
         cameraId,
         {
           fps: 10,
-          qrbox: { width: 250, height: 250 },
+          qrbox: { width: 400, height: 400 },
           aspectRatio: 1.0,
+          videoConstraints: {
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            facingMode: "environment",
+          },
         },
         (decodedText) => {
           // QR code detected

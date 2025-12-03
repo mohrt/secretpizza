@@ -120,7 +120,7 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
           const share = shareStrings[selectedKeySlice]
           if (share) {
             // Generate QR code for this slice
-            const qrCode = await generateQRCodeDataURL(share, { width: 400, errorCorrectionLevel: 'H' })
+            const qrCode = await generateQRCodeDataURL(share, { width: 600, errorCorrectionLevel: 'H' })
             
             setCurrentSliceData({
               share,
@@ -276,7 +276,7 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
         const slicesWithQR = await Promise.all(
           shareStrings.map(async (share, index) => ({
             share,
-            qrCode: await generateQRCodeDataURL(share, { width: 400, errorCorrectionLevel: 'H' }),
+            qrCode: await generateQRCodeDataURL(share, { width: 600, errorCorrectionLevel: 'H' }),
             index: index + 1,
           }))
         )
