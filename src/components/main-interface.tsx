@@ -417,19 +417,19 @@ export const MainInterface = forwardRef<MainInterfaceHandle, MainInterfaceProps>
               value="about"
               className="text-sm font-medium h-9 md:h-auto text-muted-foreground border-0 rounded-none bg-transparent shadow-none data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             >
-              Why slice your private 🔑 ?
+              Why slice your secrets?
             </TabsTrigger>
             <TabsTrigger
               value="generate"
               className="text-sm font-medium h-9 md:h-auto text-muted-foreground border-0 rounded-none bg-transparent shadow-none data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             >
-              Cut private 🔑 into slices
+              Cut secrets into slices
             </TabsTrigger>
             <TabsTrigger
               value="restore"
               className="text-sm font-medium h-9 md:h-auto text-muted-foreground border-0 rounded-none bg-transparent shadow-none data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             >
-              Restore private 🔑 from slices
+              Restore secrets from slices
             </TabsTrigger>
           </TabsList>
 
