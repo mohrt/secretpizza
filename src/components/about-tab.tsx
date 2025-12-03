@@ -129,6 +129,16 @@ export function AboutTab() {
               @shadilayvision
               <ExternalLink className="h-3 w-3" />
             </a>
+            {" "}. Source code on{" "}
+            <a
+              href="https://github.com/mohrt/secretpizza"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline inline-flex items-center gap-0.5"
+            >
+              GitHub
+              <ExternalLink className="h-3 w-3" />
+            </a>
           </p>
         </div>
       </CardContent>
