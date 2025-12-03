@@ -63,7 +63,7 @@ See `terraform/README.md` for infrastructure setup instructions.
 
 MIT License
 
-Copyright (c) 2024 Secret Pizza
+Copyright (c) 2025 Secret Pizza
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
