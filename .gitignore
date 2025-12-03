@@ -40,3 +40,7 @@ lerna-debug.log*
 # Scripts
 /scripts
 
+# Terraform
+*.tfplan
+terraform/tfplan
+
